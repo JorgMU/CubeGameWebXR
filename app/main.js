@@ -9,7 +9,8 @@ import { VRButton } from 'three/addons/webxr/VRButton.js';
 // squares to finish the level. No timer, no lose condition in v1.
 // Controls: Quest thumbstick rolls; hold BOTH grips to drag the world
 // (translate / yaw-rotate / scale). Desktop: arrows/WASD roll, Q/E rotate,
-// +/- scale, N next level, R restart level, 0 reset world transform.
+// +/- scale, N next level, R restart level, 0 reset world transform,
+// Ctrl+Arrow moves the world (one cell step, hold to repeat).
 // ---------------------------------------------------------------------------
 
 const GRID = 10;
@@ -151,7 +152,12 @@ cube.add(new THREE.LineSegments(
 ));
 worldGroup.add(cube);
 
-// --- In-world status panel (standing at the near edge, facing the player) ---
+// --- In-world status text (flat in the board plane, off the near edge) ---
+// Same plane as the board and icons (rotation.x = -PI/2), sitting just
+// past the south edge, toward the player. No background, no border —
+// just text, so it reads as text on the board plane rather than a sign.
+// With rotation.x = -PI/2 the top of the canvas points north (-z), so the
+// text reads upright when viewed from the player (south) side.
 const panelCanvas = document.createElement('canvas');
 panelCanvas.width = 1024; panelCanvas.height = 288;
 const panelCtx = panelCanvas.getContext('2d');
@@ -159,9 +165,10 @@ const panelTexture = new THREE.CanvasTexture(panelCanvas);
 panelTexture.colorSpace = THREE.SRGBColorSpace;
 const panel = new THREE.Mesh(
   new THREE.PlaneGeometry(1.8, 0.5),
-  new THREE.MeshBasicMaterial({ map: panelTexture, transparent: false })
+  new THREE.MeshBasicMaterial({ map: panelTexture, transparent: true, side: THREE.DoubleSide })
 );
-panel.position.set(0, 0.55, BOARD_SIZE / 2 + 0.35);
+panel.rotation.x = -Math.PI / 2;
+panel.position.set(0, 0.012, BOARD_SIZE / 2 + 0.35);
 worldGroup.add(panel);
 
 // --- Game state ---------------------------------------------------------------
@@ -255,11 +262,8 @@ function updateHUD() {
   hudDown.textContent = down.name;
   hudDown.style.color = down.css;
   hudMessage.textContent = message;
-  // In-world panel
-  panelCtx.fillStyle = '#0b1020';
-  panelCtx.fillRect(0, 0, 1024, 288);
-  panelCtx.strokeStyle = '#88aaff'; panelCtx.lineWidth = 6;
-  panelCtx.strokeRect(6, 6, 1012, 276);
+  // In-world panel: text only, no background fill and no border.
+  panelCtx.clearRect(0, 0, 1024, 288);
   panelCtx.fillStyle = '#ffffff';
   panelCtx.font = 'bold 52px system-ui, sans-serif';
   panelCtx.textAlign = 'center';
@@ -341,6 +345,19 @@ function finishRoll() {
 // --- Desktop keys ---------------------------------------------------------------
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
+  // Ctrl+Arrow moves the world instead of rolling the cube (desktop
+  // testing). Scene axes, so Ctrl+Up always moves the board away from
+  // the player on screen, regardless of any world yaw rotation. One
+  // CELL per press; holding the keys repeats, so it slides smoothly.
+  if (e.ctrlKey && k.startsWith('arrow')) {
+    e.preventDefault();
+    const step = CELL;
+    if (k === 'arrowup') worldGroup.position.z -= step;
+    else if (k === 'arrowdown') worldGroup.position.z += step;
+    else if (k === 'arrowleft') worldGroup.position.x -= step;
+    else if (k === 'arrowright') worldGroup.position.x += step;
+    return;
+  }
   if (k === 'arrowup' || k === 'w') tryRoll('north');
   else if (k === 'arrowdown' || k === 's') tryRoll('south');
   else if (k === 'arrowleft' || k === 'a') tryRoll('west');

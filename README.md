@@ -37,6 +37,7 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 
 ### Desktop (for testing logic without a headset)
 - Arrow keys / WASD: roll.
+- Ctrl+Arrow keys: move the world (one cell, 0.2 m, per press; hold to slide). Ctrl+Up moves the board away from you, Ctrl+Down toward you, Ctrl+Left/Right sideways.
 - N: next level. R: restart the current level (same pattern, icons restored).
 - Q / E: rotate the world. + / -: scale the world. 0: reset world position,
   rotation, and scale.
@@ -123,7 +124,8 @@ Quest, you still need an HTTPS URL (see Option A).
 - `app/index.html` — page, HUD, import map for Three.js, loads `main.js`.
 - `app/main.js` — the whole game: board, cube orientation and rolling
   animation, flat icons, level generation, thumbstick/grip input, and
-  the in-world status panel.
+  the in-world status text (flat in the board plane, just past the near
+  edge toward the player, no background or border).
 - `StartCubeGameWebXR.ps1` / `StopCubeGameWebXR.ps1` — local server +
   Cloudflare tunnel for Quest testing (repo root, not served).
 
