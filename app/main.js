@@ -12,7 +12,7 @@ import { VRButton } from 'three/addons/webxr/VRButton.js';
 // +/- scale, N next level, R restart level, 0 reset world transform.
 // ---------------------------------------------------------------------------
 
-const GRID = 5;
+const GRID = 10;
 const CELL = 0.4;
 const BOARD_SIZE = GRID * CELL; // 2.0 m
 const CUBE = CELL; // cube fills a cell, so rolling over its edge lands centred
