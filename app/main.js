@@ -15,6 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
+const BUILD_TIMESTAMP = '2026-11-03@16:41:23';
 const GRID = 10;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -202,7 +203,7 @@ const DEBUG_SECONDS = 0.2;
 let debugVisible = true;
 let debugTimer = 0;
 const debugCanvas = document.createElement('canvas');
-debugCanvas.width = 1024; debugCanvas.height = 240;
+debugCanvas.width = 1024; debugCanvas.height = 300;
 const debugCtx = debugCanvas.getContext('2d');
 const debugTexture = new THREE.CanvasTexture(debugCanvas);
 debugTexture.colorSpace = THREE.SRGBColorSpace;
@@ -240,7 +241,7 @@ function debugLines() {
   const yawDeg = Math.atan2(-boardX.z, boardX.x) * RAD2DEG;
   const pose = `Board   yaw ${yawDeg.toFixed(0)}°  tilt ${tiltDeg}° (0 flat, 90 facing you)`;
   const buttons = `Left buttons down: ${leftButtonsDown || '-'}`;
-  return [player, board, pose, buttons];
+  return [`Build   ${BUILD_TIMESTAMP}`, player, board, pose, buttons];
 }
 
 function updateDebug() {
@@ -340,10 +341,12 @@ const hudLevel = document.getElementById('hudLevel');
 const hudRemaining = document.getElementById('hudRemaining');
 const hudDown = document.getElementById('hudDown');
 const hudMessage = document.getElementById('hudMessage');
+const hudBuildTimestamp = document.getElementById('hudBuildTimestamp');
 
 function updateHUD() {
   hudLevel.textContent = String(level);
   hudRemaining.textContent = String(remaining);
+  hudBuildTimestamp.textContent = `Build: ${BUILD_TIMESTAMP}`;
   const down = COLORS[orientation.down];
   hudDown.textContent = down.name;
   hudDown.style.color = down.css;
@@ -513,7 +516,11 @@ function resetWorldForVR() {
 }
 renderer.xr.addEventListener('sessionstart', resetWorldForVR);
 renderer.xr.addEventListener('sessionend', () => {
-  gripHeld.fill(false); drag = null; setMenuOpen(false);
+  if (exitTimer !== null) window.clearTimeout(exitTimer);
+  exitTimer = null;
+  gripHeld.fill(false); drag = null; exitPending = false;
+  exitMessageMesh.visible = false;
+  setMenuOpen(false);
 });
 
 // --- Controller menu --------------------------------------------------------
@@ -527,8 +534,39 @@ const MENU_W = 512, MENU_H = 20 + MENU_ROWS * 150;
 let menuOpen = false;
 let menuHover = -1; // -1 none, 0 Debug, 1 Reset view, 2 Exit VR
 let menuPrev = false;
+let exitPending = false;
+let exitTimer = null;
+const EXIT_VR_DELAY_MS = 3000;
+const EXIT_VR_MESSAGE = 'Exiting VR in 3 seconds. Look forward; your view will be reset.';
 let leftButtonsDown = '';
 let leftController = null, rightController = null;
+
+const exitMessageCanvas = document.createElement('canvas');
+exitMessageCanvas.width = 1024;
+exitMessageCanvas.height = 256;
+const exitMessageCtx = exitMessageCanvas.getContext('2d');
+exitMessageCtx.fillStyle = 'rgba(5, 5, 16, 0.9)';
+exitMessageCtx.strokeStyle = '#ffffff';
+exitMessageCtx.lineWidth = 6;
+exitMessageCtx.beginPath();
+exitMessageCtx.roundRect(8, 8, 1008, 240, 32);
+exitMessageCtx.fill();
+exitMessageCtx.stroke();
+exitMessageCtx.fillStyle = '#ffffff';
+exitMessageCtx.textAlign = 'center';
+exitMessageCtx.textBaseline = 'middle';
+exitMessageCtx.font = 'bold 60px system-ui, sans-serif';
+exitMessageCtx.fillText('Exiting VR in 3 seconds', 512, 88);
+exitMessageCtx.font = '40px system-ui, sans-serif';
+exitMessageCtx.fillText('Look forward; your view will be reset.', 512, 172);
+const exitMessageTexture = new THREE.CanvasTexture(exitMessageCanvas);
+exitMessageTexture.colorSpace = THREE.SRGBColorSpace;
+const exitMessageMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(1.3, 0.325),
+  new THREE.MeshBasicMaterial({ map: exitMessageTexture, transparent: true, side: THREE.DoubleSide })
+);
+exitMessageMesh.visible = false;
+scene.add(exitMessageMesh);
 
 controller0.addEventListener('connected', (e) => assignHand(controller0, e.data));
 controller1.addEventListener('connected', (e) => assignHand(controller1, e.data));
@@ -613,20 +651,37 @@ function updateMenuHover() {
 
 function activateMenuItem() {
   if (!menuOpen) return;
-  if (menuHover === 0) {
+  const selected = menuHover;
+  if (selected < 0) return;
+  setMenuOpen(false);
+  if (selected === 0) {
     debugVisible = !debugVisible;
     updateDebug();
-    drawMenu();
-  } else if (menuHover === 1) {
+  } else if (selected === 1) {
     const atHome = worldGroup.position.distanceTo(VR_HOME) < 0.005
       && Math.abs(worldGroup.scale.x - VR_HOME_SCALE) < 0.005
       && worldGroup.quaternion.angleTo(IDENTITY_Q) < 0.005;
     if (atHome) message = 'View is already at the home position.';
     else { resetWorldForVR(); message = 'View reset.'; }
     updateHUD();
-  } else if (menuHover === 2) {
+  } else if (selected === 2) {
     const session = renderer.xr.getSession();
-    if (session) session.end();
+    if (session) {
+      exitPending = true;
+      message = EXIT_VR_MESSAGE;
+      exitMessageMesh.visible = true;
+      updateHUD();
+      exitTimer = window.setTimeout(() => {
+        exitTimer = null;
+        if (renderer.xr.getSession() !== session) return;
+        session.end().catch((error) => {
+          exitPending = false;
+          exitMessageMesh.visible = false;
+          message = `Could not exit VR: ${error instanceof Error ? error.message : String(error)}`;
+          updateHUD();
+        });
+      }, EXIT_VR_DELAY_MS);
+    }
   }
 }
 controller0.addEventListener('selectstart', () => { if (controller0 === rightController) activateMenuItem(); });
@@ -721,6 +776,19 @@ renderer.setAnimationLoop(() => {
     cube.position.copy(roll.edge).add(roll.startOffset.clone().applyQuaternion(q));
     cube.quaternion.copy(q).multiply(roll.startQuat);
     if (pRaw >= 1) finishRoll();
+  }
+
+  if (exitPending) {
+    const viewerPosition = renderer.xr.getCamera(camera).getWorldPosition(new THREE.Vector3());
+    worldGroup.getWorldPosition(exitMessageMesh.position);
+    exitMessageMesh.position.y = viewerPosition.y;
+    exitMessageMesh.lookAt(viewerPosition);
+    if (message !== EXIT_VR_MESSAGE) {
+      message = EXIT_VR_MESSAGE;
+      updateHUD();
+    }
+    renderer.render(scene, camera);
+    return;
   }
 
   const input = readXRInput();

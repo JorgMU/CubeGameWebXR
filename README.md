@@ -49,8 +49,12 @@ and Purple west.
 - **Left menu button or Y button**: opens/closes a small menu attached to the left controller.
   Point the right controller at an item and pull its trigger: **Debug: On/Off**
   toggles the debug readout, **Reset view** returns the board to the VR start
-  view, **Exit VR** ends the immersive session. While the
-  menu is open the thumbstick and trigger do not roll the cube or start a level.
+  view, and **Exit VR** ends the immersive session. The menu closes after any
+  selection. Choosing **Exit VR** shows a 3-second reminder on a panel facing
+  you above the table center at eye height. Look forward; the Quest resets its
+  front direction to where you are looking when the immersive session ends.
+  While the menu is open the thumbstick and trigger do not roll the cube or
+  start a level.
   (On the Quest browser the left menu button is reported as button index 12
   and Y as 5; the debug readout's "Left buttons down" line shows the indices.)
 
@@ -132,6 +136,9 @@ Quest, you still need an HTTPS URL (see Option A).
 
 Small grey text, shown in the HTML HUD (top-left, desktop) and in the world
 just beyond the status text. Refreshed about 5 times a second. P toggles it.
+The build timestamp is also shown in the HUD and debug readout, using
+`yyyy-MM-dd@HH:mm:ss`. Since this project has no build step, update the
+`BUILD_TIMESTAMP` constant in `app/main.js` whenever the app is changed.
 
 - **Player** — where the view is from: x/y/z in metres, and `facing`, the
   head's turn about the vertical axis (positive = counterclockwise from above).
