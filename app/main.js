@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
@@ -16,7 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@17:39:18';
+const BUILD_TIMESTAMP = '2026-11-03@17:54:10';
 const GRID = 10;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -62,19 +61,15 @@ renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
-// Passthrough can't be switched off inside a running session, so there are two
-// start buttons: a plain immersive-vr session (no passthrough at all) and an
-// immersive-ar session (adds the Passthrough sky mode).
-const vrButton = VRButton.createButton(renderer);
-document.body.appendChild(vrButton);
-(navigator.xr ? navigator.xr.isSessionSupported('immersive-ar').catch(() => false) : Promise.resolve(false))
-  .then((arSupported) => {
-    if (!arSupported) return;
-    const arButton = ARButton.createButton(renderer);
-    vrButton.style.left = 'calc(50% - 160px)';
-    arButton.style.left = 'calc(50% + 10px)';
-    document.body.appendChild(arButton);
-  });
+// Mixed reality only: one immersive-ar session (the WebXR name for it), which
+// is what gives the Quest its passthrough. The button's "AR" text is shown as "MR".
+const mrButton = ARButton.createButton(renderer);
+new MutationObserver(() => {
+  const text = mrButton.textContent.replace(/\bAR\b/, 'MR');
+  if (text !== mrButton.textContent) mrButton.textContent = text;
+}).observe(mrButton, { childList: true, characterData: true, subtree: true });
+mrButton.textContent = mrButton.textContent.replace(/\bAR\b/, 'MR');
+document.body.appendChild(mrButton);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
@@ -96,17 +91,13 @@ scene.add(sun);
 const worldGroup = new THREE.Group();
 // Home poses for the board, one per display mode, all in one place.
 // position is in metres relative to the player's floor origin; tilt is degrees
-// (0 flat, 90 facing the player). MR = an immersive-ar session (blended with
-// the real world); VR = an opaque immersive-vr session.
+// (0 flat, 90 facing the player).
 const HOMES = {
   desktop: { position: new THREE.Vector3(0, 0.5, -2.0), tilt: 0, scale: 1 },
   mr: { position: new THREE.Vector3(0, -0.1, -1.75), tilt: 30, scale: 0.75 },
-  vr: { position: new THREE.Vector3(0, 0.75, -1.75), tilt: 30, scale: 0.75 },
 };
 function currentHome() {
-  const session = renderer.xr.getSession();
-  if (!session) return HOMES.desktop;
-  return session.environmentBlendMode === 'opaque' ? HOMES.vr : HOMES.mr;
+  return renderer.xr.getSession() ? HOMES.mr : HOMES.desktop;
 }
 const EXIT_MESSAGE_RISE = 0.4; // metres above eye height, clear of the tilted board
 // Rotation/scale gain for the two-grip drag (1 = hands map 1:1).
@@ -514,7 +505,7 @@ function finishRoll() {
     remaining -= 1;
     if (remaining <= 0) {
       win = true;
-      message = 'Level complete! Press N, or a trigger in VR, for the next level.';
+      message = 'Level complete! Press N, or a trigger in MR, for the next level.';
     } else {
       message = `Matched ${COLORS[orientation.down].name}! ${remaining} left.`;
     }
@@ -555,7 +546,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'p') { debugVisible = !debugVisible; updateDebug(); }
   else if (k === 'k') toggleSky();
   else if (k === '0') {
-    if (renderer.xr.isPresenting) { resetWorldForVR(); return; }
+    if (renderer.xr.isPresenting) { resetWorldForMR(); return; }
     worldGroup.position.copy(HOMES.desktop.position);
     worldGroup.quaternion.identity();
     tiltDeg = 0;
@@ -600,14 +591,14 @@ const gripHeld = [false, false];
 });
 // Immersive start: centred on the board, tilted, slightly smaller board (see HOMES).
 const homeQuat = (home) => new THREE.Quaternion().setFromAxisAngle(TILT_AXIS, home.tilt * Math.PI / 180);
-function resetWorldForVR() {
+function resetWorldForMR() {
   const home = currentHome();
   worldGroup.position.copy(home.position);
   worldGroup.quaternion.copy(homeQuat(home));
   tiltDeg = home.tilt;
   worldGroup.scale.setScalar(home.scale);
 }
-renderer.xr.addEventListener('sessionstart', resetWorldForVR);
+renderer.xr.addEventListener('sessionstart', resetWorldForMR);
 renderer.xr.addEventListener('sessionend', () => {
   if (exitTimer !== null) window.clearTimeout(exitTimer);
   exitTimer = null;
@@ -626,12 +617,12 @@ const MENU_TOGGLE_BUTTONS = [12, 5]; // 12 = menu button, 5 = Y
 const MENU_ROWS = 4;
 const MENU_W = 512, MENU_H = 20 + MENU_ROWS * 150;
 let menuOpen = false;
-let menuHover = -1; // -1 none, 0 Debug, 1 Sky, 2 Reset view, 3 Exit VR
+let menuHover = -1; // -1 none, 0 Debug, 1 Sky, 2 Reset view, 3 Exit MR
 let menuPrev = false;
 let exitPending = false;
 let exitTimer = null;
-const EXIT_VR_DELAY_MS = 3000;
-const EXIT_VR_MESSAGE = 'Exiting VR in 3 seconds. Look forward; your view will be reset.';
+const EXIT_MR_DELAY_MS = 3000;
+const EXIT_MR_MESSAGE = 'Exiting MR in 3 seconds. Look forward; your view will be reset.';
 let leftButtonsDown = '';
 let leftController = null, rightController = null;
 
@@ -650,7 +641,7 @@ exitMessageCtx.fillStyle = '#ffffff';
 exitMessageCtx.textAlign = 'center';
 exitMessageCtx.textBaseline = 'middle';
 exitMessageCtx.font = 'bold 60px system-ui, sans-serif';
-exitMessageCtx.fillText('Exiting VR in 3 seconds', 512, 88);
+exitMessageCtx.fillText('Exiting MR in 3 seconds', 512, 88);
 exitMessageCtx.font = '40px system-ui, sans-serif';
 exitMessageCtx.fillText('Look forward; your view will be reset.', 512, 172);
 const exitMessageTexture = new THREE.CanvasTexture(exitMessageCanvas);
@@ -697,7 +688,7 @@ function attachMenu() {
 
 function drawMenu() {
   menuCtx.clearRect(0, 0, MENU_W, MENU_H);
-  const rows = [`Debug: ${debugVisible ? 'On' : 'Off'}`, `Sky: ${SKY_MODES[nextSkyMode()]}`, 'Reset view', 'Exit VR'];
+  const rows = [`Debug: ${debugVisible ? 'On' : 'Off'}`, `Sky: ${SKY_MODES[nextSkyMode()]}`, 'Reset view', 'Exit MR'];
   rows.forEach((label, i) => {
     const y = 20 + i * 150;
     menuCtx.fillStyle = i === menuHover ? '#3498db' : 'rgba(20,20,30,0.92)';
@@ -759,13 +750,13 @@ function activateMenuItem() {
       && Math.abs(worldGroup.scale.x - home.scale) < 0.005
       && worldGroup.quaternion.angleTo(homeQuat(home)) < 0.005;
     if (atHome) message = 'View is already at the home position.';
-    else { resetWorldForVR(); message = 'View reset.'; }
+    else { resetWorldForMR(); message = 'View reset.'; }
     updateHUD();
   } else if (selected === 3) {
     const session = renderer.xr.getSession();
     if (session) {
       exitPending = true;
-      message = EXIT_VR_MESSAGE;
+      message = EXIT_MR_MESSAGE;
       exitMessageMesh.visible = true;
       updateHUD();
       exitTimer = window.setTimeout(() => {
@@ -774,10 +765,10 @@ function activateMenuItem() {
         session.end().catch((error) => {
           exitPending = false;
           exitMessageMesh.visible = false;
-          message = `Could not exit VR: ${error instanceof Error ? error.message : String(error)}`;
+          message = `Could not exit MR: ${error instanceof Error ? error.message : String(error)}`;
           updateHUD();
         });
-      }, EXIT_VR_DELAY_MS);
+      }, EXIT_MR_DELAY_MS);
     }
   }
 }
@@ -880,8 +871,8 @@ renderer.setAnimationLoop(() => {
     worldGroup.getWorldPosition(exitMessageMesh.position);
     exitMessageMesh.position.y = viewerPosition.y + EXIT_MESSAGE_RISE;
     exitMessageMesh.lookAt(viewerPosition);
-    if (message !== EXIT_VR_MESSAGE) {
-      message = EXIT_VR_MESSAGE;
+    if (message !== EXIT_MR_MESSAGE) {
+      message = EXIT_MR_MESSAGE;
       updateHUD();
     }
     renderer.render(scene, camera);

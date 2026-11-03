@@ -51,9 +51,9 @@ and Purple west.
   toggles the debug readout, **Sky: <mode>** shows the mode a click will switch to (the debug readout shows the current one) and cycles the star map
   between the tuned version, the unadjusted NASA data, a plain black background, and
   (Quest, in the headset only) the real-world passthrough view, **Reset view**
-  returns the board to the VR start
-  view, and **Exit VR** ends the immersive session. The menu closes after any
-  selection. Choosing **Exit VR** shows a 3-second reminder on a panel facing
+  returns the board to the MR start
+  view, and **Exit MR** ends the immersive session. The menu closes after any
+  selection. Choosing **Exit MR** shows a 3-second reminder on a panel facing
   you above the table center, 0.4 m above eye height so it clears the board. Look forward; the Quest resets its
   front direction to where you are looking when the immersive session ends.
   While the menu is open the thumbstick and trigger do not roll the cube or
@@ -67,9 +67,9 @@ and Purple west.
 - Q / E: rotate the world.
 - + / - or mouse wheel: scale the world (scroll up / + enlarges ×1.1, scroll down / - shrinks ×0.9).
 - 0: reset world position, rotation, and scale.
-  Home poses for 2D, MR (`immersive-ar`) and VR (`immersive-vr`) are listed together
-  in the `HOMES` table near the top of `app/main.js`; the VR/MR one is used by the
-  Quest "Reset view" menu item and when a session starts.
+  Home poses for 2D and MR are listed together in the `HOMES` table near the top
+  of `app/main.js`; the MR one is used by the Quest "Reset view" menu item and
+  when a session starts.
 - P: show/hide the debug readout (small grey text; see "Debug readout" below).
 - K: cycle the sky: adjusted, raw, off (black).
 - N: next level. R: restart the current level (same pattern, icons restored).
@@ -120,14 +120,14 @@ resolution is what matters, which is why 8k is used when the GPU allows it.
 - **Raw**: only the linear-to-sRGB conversion, with no glow removal, gain, or
   bloom. It is hazier and dimmer, with a bright Milky Way band.
 
-Cycle with the **Sky** menu item in VR, or K on desktop (Adjusted, Raw, Off =
-plain black, a solid black sphere with no texture in memory, because AR sessions
-ignore the scene background colour; Passthrough is added to the
-cycle only inside a headset session that blends with the real world). WebXR
-can't turn passthrough off inside a running session, so the page has two start
-buttons: **ENTER VR** (an `immersive-vr` session, no passthrough at all) and, when
-the browser supports it, **START AR** (an `immersive-ar` session, which adds the
-Passthrough mode). Only one 8k texture
+Cycle with the **Sky** menu item in MR, or K on desktop (Adjusted, Raw, Off =
+plain black, a solid black sphere with no texture in memory, because
+immersive-ar sessions ignore the scene background colour; Passthrough is added to
+the cycle only when the session's display blends with the real world). The app
+has a single start button for one `immersive-ar` session (WebXR's name for what
+this README calls MR; the button text is shown as "START MR"). There is no
+separate VR mode; the runtime decides what happens on a device without
+passthrough. Only one 8k texture
 is held in GPU memory at a time. The sphere stays black until the first image
 loads.
 
@@ -185,7 +185,7 @@ The build timestamp is also shown in the HUD and debug readout, using
 
 - **Player** — where the view is from: x/y/z in metres, and `facing`, the
   head's turn about the vertical axis (positive = counterclockwise from above).
-  In VR this is your headset; on desktop it is the fixed testing camera.
+  In MR this is your headset; on desktop it is the fixed testing camera.
 - **Board** — the game world's position (x/y/z) and scale.
 - **Board yaw / tilt** — rotation of the board: yaw is the turn about the
   vertical axis; tilt is 0° flat (face up) to 180°, with 90° facing the player.
