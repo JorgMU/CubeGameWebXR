@@ -10,7 +10,8 @@ import { VRButton } from 'three/addons/webxr/VRButton.js';
 // Controls: Quest thumbstick rolls; hold BOTH grips to drag the world
 // (translate / yaw-rotate / scale). Desktop: arrows/WASD roll, Q/E rotate,
 // +/- scale, N next level, R restart level, 0 reset world transform,
-// Ctrl+Arrow moves the world (one cell step, hold to repeat).
+// Ctrl+Arrow moves the world (one cell step, hold to repeat),
+// mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
 const GRID = 10;
@@ -374,6 +375,13 @@ window.addEventListener('keydown', (e) => {
     worldGroup.scale.setScalar(1);
   }
 });
+// Mouse wheel scales the world, exactly like +/- on the keyboard:
+// scroll up enlarges (x1.1), scroll down shrinks (x0.9). passive: false
+// so preventDefault() can stop the page itself from scrolling/zooming.
+window.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  worldGroup.scale.multiplyScalar(e.deltaY < 0 ? 1.1 : 0.9);
+}, { passive: false });
 document.getElementById('btnNext').addEventListener('click', nextLevel);
 document.getElementById('btnRestart').addEventListener('click', restartLevel);
 

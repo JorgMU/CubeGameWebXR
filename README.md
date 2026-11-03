@@ -38,6 +38,7 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 ### Desktop (for testing logic without a headset)
 - Arrow keys / WASD: roll.
 - Ctrl+Arrow keys: move the world (one cell, 0.2 m, per press; hold to slide). Ctrl+Up moves the board away from you, Ctrl+Down toward you, Ctrl+Left/Right sideways.
+- Mouse wheel: scale the world, same as +/- — scroll up enlarges (×1.1), scroll down shrinks (×0.9). 0 resets position, rotation, and scale.
 - N: next level. R: restart the current level (same pattern, icons restored).
 - Q / E: rotate the world. + / -: scale the world. 0: reset world position,
   rotation, and scale.
