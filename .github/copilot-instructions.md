@@ -6,7 +6,7 @@
 - Items labeled REMINDER must only be mentioned in chat — never executed.
 - Reminder message format: "Reminder: <task>. (I did not perform this task.)"
 - If a task is unclear, ask before acting.
-- Automatically stage newly created files unless the user explicitly says not to.
+- Automatically stage newly created files unless the user explicitly says not to. Never stage changes to existing (tracked) files; leave them unstaged so the user can review them with diff first.
 
 ## Repo-Specific Workflow Rules
 
@@ -53,7 +53,7 @@ Run this protocol **once per programming session**, only when the user says they
 7. ACTION: After the user pastes the latest conversation into the appropriate `Chat_<date>.txt` file and confirms it is saved, run a sensitive-information check only when scanning is required by Step 6.
    - Scope: only version-controlled files in the repo.
    - If sensitive information is found, alert the user and halt publishing until resolved.
-8. ACTION: Stage any modified files.
+8. ACTION: Stage only newly created files. Do not stage changes to existing files.
 
 ### Reminders (do not execute)
 
@@ -68,6 +68,7 @@ Run this protocol **once per programming session**, only when the user says they
 | Response style | Short and direct |
 | Commit policy | Explicit request only |
 | Auto-stage new files | Yes |
+| Stage changes to existing files | No (user reviews with diff first) |
 
 ## Key Files
 

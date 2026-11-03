@@ -11,6 +11,8 @@
     "Reviewed and deleted scratch/Muse - CubeGameWebXR Project Summary.md after preserving its useful project and verification notes in README.md and this context file.",
     "Collapsed per-conversation Chat_* files into one .md/.txt pair per programming session (Chat_2026-11-03); the Session End Protocol now runs only when the user says they are done for the session.",
     "Added a small grey debug readout (player position/facing, board position/scale/yaw/tilt) in the HTML HUD and as a world panel beyond the status text; P toggles it. HUD readout verified in a desktop browser; the in-world panel and live refresh still need a Quest check.",
+    "Controller menu opens with the left menu button (index 12, confirmed reported by the Quest browser) or Y (index 5, confirmed working); right-controller ray + trigger selects Debug On/Off and Exit VR.",
+    "World drag: one grip translates only; both grips also rotate (yaw) and scale. The drag re-anchors whenever the set of held grips changes. Needs a Quest test.",
     "Handoff cleanup: removed duplicate tag HandOffFromMuse, added v5 tag on 9b5dc13, removed scratch.ps1 and the stale .txt copies of context/instructions, tidied README and HUD help text, and changed Quest grip detection to per-controller squeeze events (user-verified working on Quest).",
     "Start script now binds the server and tunnel to 127.0.0.1, shares one running-PID helper, and the Stop script's manual hint uses Stop-Process -Id; smoke-tested start/stop."
   ],

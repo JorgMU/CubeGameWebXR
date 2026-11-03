@@ -31,15 +31,25 @@ and Purple west.
 ### Meta Quest (Quest Browser, WebXR)
 - **Thumbstick** (either controller): push to roll one square that way.
   Push forward = north (away from you), back = south, left/right as shown.
-- **Both grips together**: world drag. While both grips are held:
-  - move your hands to translate the world,
-  - twist your hands to rotate the world (yaw only, so the board stays horizontal),
-  - move your hands apart to enlarge the world, together to shrink it.
-  - Release either grip to end the drag.
+- **Grips**: world drag.
+  - **One grip** (either hand): the world follows that hand, translate only.
+  - **Both grips**: the world also rotates and scales:
+    - move your hands to translate the world,
+    - twist your hands to rotate the world (yaw only, so the board stays horizontal),
+    - move your hands apart to enlarge the world, together to shrink it.
+  - Adding or releasing a grip re-anchors the drag, so the world never jumps;
+    release all grips to end it.
   - To the player this feels like the world moving around them; it is
     implemented as moving the board/cube/icon group, which is the same
     relative motion as moving the player the opposite way.
 - **Trigger** after a win: starts the next level.
+- **Left menu button or Y button**: opens/closes a small menu attached to the left controller.
+  Point the right controller at an item and pull its trigger: **Debug: On/Off**
+  toggles the debug readout, **Reset view** returns the board to the VR start
+  view, **Exit VR** ends the immersive session. While the
+  menu is open the thumbstick and trigger do not roll the cube or start a level.
+  (On the Quest browser the left menu button is reported as button index 12
+  and Y as 5; the debug readout's "Left buttons down" line shows the indices.)
 
 ### Desktop (for testing logic without a headset)
 - Arrow keys / WASD: roll.
@@ -127,6 +137,8 @@ just beyond the status text. Refreshed about 5 times a second. P toggles it.
 - **Board yaw / tilt** — rotation of the board: yaw is the turn about the
   vertical axis; `tilt fwd/back` and `side` are the pitch and roll, which are
   always 0° for now because only yaw is implemented.
+- **Left buttons down** — button indices currently pressed on the left
+  controller (for finding out which buttons the Quest browser exposes).
 
 Player and board are separate things in the same coordinate space. The player
 is the camera (tracked by the headset; you move it by walking). The board is

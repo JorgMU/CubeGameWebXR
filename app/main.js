@@ -78,7 +78,10 @@ scene.add(sun);
 // instead of orbiting it around the player. Dragging this group is, to the
 // player, the same as moving the player the opposite way.
 const worldGroup = new THREE.Group();
-const WORLD_HOME = new THREE.Vector3(0, 1.0, -2.0);
+const WORLD_HOME = new THREE.Vector3(0, 0.5, -2.0);
+const VR_HOME_SCALE = 0.75; // board scale when an immersive session starts
+// Rotation/scale gain for the two-grip drag (1 = hands map 1:1).
+const ROTATE_GAIN = 0.4, SCALE_GAIN = 0.4;
 worldGroup.position.copy(WORLD_HOME);
 scene.add(worldGroup);
 
@@ -180,7 +183,7 @@ const DEBUG_SECONDS = 0.2;
 let debugVisible = true;
 let debugTimer = 0;
 const debugCanvas = document.createElement('canvas');
-debugCanvas.width = 1024; debugCanvas.height = 192;
+debugCanvas.width = 1024; debugCanvas.height = 240;
 const debugCtx = debugCanvas.getContext('2d');
 const debugTexture = new THREE.CanvasTexture(debugCanvas);
 debugTexture.colorSpace = THREE.SRGBColorSpace;
@@ -214,7 +217,8 @@ function debugLines() {
   dbgEuler.setFromQuaternion(worldGroup.quaternion, 'YXZ');
   const board = `Board   x ${wp.x.toFixed(2)}  y ${wp.y.toFixed(2)}  z ${wp.z.toFixed(2)}  scale ${worldGroup.scale.x.toFixed(2)}`;
   const pose = `Board   yaw ${(dbgEuler.y * RAD2DEG).toFixed(0)}°  tilt fwd/back ${(dbgEuler.x * RAD2DEG).toFixed(0)}°  side ${(dbgEuler.z * RAD2DEG).toFixed(0)}°`;
-  return [player, board, pose];
+  const buttons = `Left buttons down: ${leftButtonsDown || '-'}`;
+  return [player, board, pose, buttons];
 }
 
 function updateDebug() {
@@ -434,6 +438,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === '-' || k === '_') worldGroup.scale.multiplyScalar(0.9);
   else if (k === 'p') { debugVisible = !debugVisible; updateDebug(); }
   else if (k === '0') {
+    if (renderer.xr.isPresenting) { resetWorldForVR(); return; }
     worldGroup.position.copy(WORLD_HOME);
     worldGroup.quaternion.identity();
     worldGroup.scale.setScalar(1);
@@ -453,10 +458,19 @@ document.getElementById('btnRestart').addEventListener('click', restartLevel);
 const controller0 = renderer.xr.getController(0);
 const controller1 = renderer.xr.getController(1);
 scene.add(controller0, controller1);
+// Simple stand-in for the controllers, which the browser does not draw.
+for (const c of [controller0, controller1]) {
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 0.04, 0.14),
+    new THREE.MeshBasicMaterial({ color: 0x8a8a8a })
+  );
+  body.position.z = 0.03;
+  c.add(body);
+}
 
 let stickReady = true;
 let triggerPrev = false;
-let drag = null; // {mid, angle, dist, worldPos, worldQuat, worldScale}
+let drag = null; // {mode: 0 | 1 | 'both', mid, angle, dist, worldPos, worldQuat, worldScale}
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpMid = new THREE.Vector3();
 
 // Grip state comes from each controller's own squeeze events, so it always
@@ -466,41 +480,187 @@ const gripHeld = [false, false];
   controller.addEventListener('squeezestart', () => { gripHeld[i] = true; });
   controller.addEventListener('squeezeend', () => { gripHeld[i] = false; });
 });
-renderer.xr.addEventListener('sessionend', () => { gripHeld.fill(false); drag = null; });
+// Immersive start: centred on the board, no rotation, slightly smaller board.
+const VR_HOME = new THREE.Vector3(0, 0.5, -2.0);
+const IDENTITY_Q = new THREE.Quaternion();
+function resetWorldForVR() {
+  worldGroup.position.copy(VR_HOME);
+  worldGroup.quaternion.identity();
+  worldGroup.scale.setScalar(VR_HOME_SCALE);
+}
+renderer.xr.addEventListener('sessionstart', resetWorldForVR);
+renderer.xr.addEventListener('sessionend', () => {
+  gripHeld.fill(false); drag = null; setMenuOpen(false);
+});
+
+// --- Controller menu --------------------------------------------------------
+// A small panel attached to the LEFT controller, opened with the left menu
+// button (or Y) and operated by pointing the RIGHT controller at it and
+// pressing its trigger.
+// Button indices measured on the Quest browser, left Touch controller.
+const MENU_TOGGLE_BUTTONS = [12, 5]; // 12 = menu button, 5 = Y
+const MENU_ROWS = 3;
+const MENU_W = 512, MENU_H = 20 + MENU_ROWS * 150;
+let menuOpen = false;
+let menuHover = -1; // -1 none, 0 Debug, 1 Reset view, 2 Exit VR
+let menuPrev = false;
+let leftButtonsDown = '';
+let leftController = null, rightController = null;
+
+controller0.addEventListener('connected', (e) => assignHand(controller0, e.data));
+controller1.addEventListener('connected', (e) => assignHand(controller1, e.data));
+function assignHand(controller, data) {
+  if (data.handedness === 'left') leftController = controller;
+  if (data.handedness === 'right') rightController = controller;
+  attachMenu();
+}
+
+const menuCanvas = document.createElement('canvas');
+menuCanvas.width = MENU_W; menuCanvas.height = MENU_H;
+const menuCtx = menuCanvas.getContext('2d');
+const menuTexture = new THREE.CanvasTexture(menuCanvas);
+menuTexture.colorSpace = THREE.SRGBColorSpace;
+const menuMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.2, 0.2 * MENU_H / MENU_W),
+  new THREE.MeshBasicMaterial({ map: menuTexture, transparent: true, side: THREE.DoubleSide })
+);
+// Above the controller and tilted back so it faces the player's eyes.
+menuMesh.position.set(0, 0.1, -0.05);
+menuMesh.rotation.x = -Math.PI / 4;
+menuMesh.visible = false;
+
+const pointerLine = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -0.6)]),
+  new THREE.LineBasicMaterial({ color: 0x9a9a9a })
+);
+pointerLine.visible = false;
+
+function attachMenu() {
+  if (leftController) leftController.add(menuMesh);
+  if (rightController) rightController.add(pointerLine);
+}
+
+function drawMenu() {
+  menuCtx.clearRect(0, 0, MENU_W, MENU_H);
+  const rows = [`Debug: ${debugVisible ? 'On' : 'Off'}`, 'Reset view', 'Exit VR'];
+  rows.forEach((label, i) => {
+    const y = 20 + i * 150;
+    menuCtx.fillStyle = i === menuHover ? '#3498db' : 'rgba(20,20,30,0.92)';
+    menuCtx.fillRect(10, y, MENU_W - 20, 130);
+    menuCtx.strokeStyle = '#9a9a9a';
+    menuCtx.lineWidth = 4;
+    menuCtx.strokeRect(10, y, MENU_W - 20, 130);
+    menuCtx.fillStyle = '#ffffff';
+    menuCtx.font = 'bold 56px system-ui, sans-serif';
+    menuCtx.textAlign = 'center';
+    menuCtx.textBaseline = 'middle';
+    menuCtx.fillText(label, MENU_W / 2, y + 65);
+  });
+  menuTexture.needsUpdate = true;
+}
+
+function setMenuOpen(open) {
+  menuOpen = open && !!leftController;
+  menuMesh.visible = menuOpen;
+  pointerLine.visible = menuOpen && !!rightController;
+  menuHover = -1;
+  if (menuOpen) drawMenu();
+}
+
+const menuRaycaster = new THREE.Raycaster();
+const menuRayDir = new THREE.Vector3();
+const menuRayQuat = new THREE.Quaternion();
+
+function updateMenuHover() {
+  let hover = -1;
+  if (menuOpen && rightController) {
+    scene.updateMatrixWorld();
+    rightController.getWorldPosition(menuRaycaster.ray.origin);
+    rightController.getWorldQuaternion(menuRayQuat);
+    menuRaycaster.ray.direction.copy(menuRayDir.set(0, 0, -1).applyQuaternion(menuRayQuat));
+    const hit = menuRaycaster.intersectObject(menuMesh)[0];
+    if (hit && hit.uv) {
+      const y = (1 - hit.uv.y) * MENU_H;
+      const row = Math.floor((y - 20) / 150);
+      if (row >= 0 && row < MENU_ROWS && (y - 20) % 150 <= 130) hover = row;
+    }
+  }
+  if (hover !== menuHover) { menuHover = hover; drawMenu(); }
+}
+
+function activateMenuItem() {
+  if (!menuOpen) return;
+  if (menuHover === 0) {
+    debugVisible = !debugVisible;
+    updateDebug();
+    drawMenu();
+  } else if (menuHover === 1) {
+    const atHome = worldGroup.position.distanceTo(VR_HOME) < 0.005
+      && Math.abs(worldGroup.scale.x - VR_HOME_SCALE) < 0.005
+      && worldGroup.quaternion.angleTo(IDENTITY_Q) < 0.005;
+    if (atHome) message = 'View is already at the home position.';
+    else { resetWorldForVR(); message = 'View reset.'; }
+    updateHUD();
+  } else if (menuHover === 2) {
+    const session = renderer.xr.getSession();
+    if (session) session.end();
+  }
+}
+controller0.addEventListener('selectstart', () => { if (controller0 === rightController) activateMenuItem(); });
+controller1.addEventListener('selectstart', () => { if (controller1 === rightController) activateMenuItem(); });
 
 function readXRInput() {
   const session = renderer.xr.getSession();
-  if (!session) return { grips: gripHeld, stick: null, trigger: false };
+  if (!session) return { grips: gripHeld, stick: null, trigger: false, menuButton: false };
   let stick = null;
   let trigger = false;
+  let menuButton = false;
+  const leftDown = [];
   const sources = session.inputSources || [];
   for (const source of sources) {
     const gp = source.gamepad;
     if (!gp) continue;
     if (gp.buttons[0] && gp.buttons[0].pressed) trigger = true;
-    if (!stick && gp.axes) {
+    if (source.handedness === 'left') {
+      gp.buttons.forEach((b, i) => { if (b.pressed) leftDown.push(i); });
+      if (MENU_TOGGLE_BUTTONS.some((i) => gp.buttons[i] && gp.buttons[i].pressed)) menuButton = true;
+    }
+    if (gp.axes) {
       const ax = gp.axes.length >= 4 ? gp.axes[2] : gp.axes[0];
       const ay = gp.axes.length >= 4 ? gp.axes[3] : gp.axes[1];
-      if (typeof ax === 'number' && typeof ay === 'number') stick = { x: ax, y: ay };
+      // Either thumbstick can roll the cube; use whichever is pushed further.
+      if (typeof ax === 'number' && typeof ay === 'number'
+          && (!stick || Math.hypot(ax, ay) > Math.hypot(stick.x, stick.y))) {
+        stick = { x: ax, y: ay };
+      }
     }
   }
-  return { grips: gripHeld, stick, trigger };
+  leftButtonsDown = leftDown.join(',');
+  return { grips: gripHeld, stick, trigger, menuButton };
 }
 
 function updateWorldDrag(input) {
-  const bothGrips = input.grips[0] && input.grips[1];
-  if (!bothGrips) { drag = null; return false; }
+  // One grip: translate only, following that hand. Both grips: translate by
+  // the midpoint, plus yaw and scale from the hand-to-hand vector.
+  const held = [input.grips[0], input.grips[1]];
+  const mode = held[0] && held[1] ? 'both' : held[0] ? 0 : held[1] ? 1 : null;
+  if (mode === null) { drag = null; return false; }
+
   controller0.getWorldPosition(tmpA);
   controller1.getWorldPosition(tmpB);
-  tmpMid.addVectors(tmpA, tmpB).multiplyScalar(0.5);
   const delta = new THREE.Vector3().subVectors(tmpB, tmpA);
   // Yaw angle of the hand-to-hand vector, measured so a positive yaw
   // (Three's rotationY) matches the hands turning toward -z from +x.
   const angle = Math.atan2(-delta.z, delta.x);
   const dist = delta.length();
-  if (!drag) {
+  if (mode === 'both') tmpMid.addVectors(tmpA, tmpB).multiplyScalar(0.5);
+  else tmpMid.copy(mode === 0 ? tmpA : tmpB);
+
+  // Re-anchor whenever the set of held grips changes, so adding or releasing
+  // a grip never makes the world jump.
+  if (!drag || drag.mode !== mode) {
     drag = {
-      mid: tmpMid.clone(), angle, dist,
+      mode, mid: tmpMid.clone(), angle, dist,
       worldPos: worldGroup.position.clone(),
       worldQuat: worldGroup.quaternion.clone(),
       worldScale: worldGroup.scale.x,
@@ -509,11 +669,14 @@ function updateWorldDrag(input) {
   }
   const midDelta = tmpMid.clone().sub(drag.mid);
   worldGroup.position.copy(drag.worldPos).add(midDelta);
-  const yawDelta = angle - drag.angle;
-  const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawDelta);
-  worldGroup.quaternion.copy(yawQuat).multiply(drag.worldQuat);
-  const scaleFactor = THREE.MathUtils.clamp(dist / Math.max(drag.dist, 0.001), 0.4, 2.5);
-  worldGroup.scale.setScalar(drag.worldScale * scaleFactor);
+  if (mode === 'both') {
+    const yawDelta = angle - drag.angle;
+    const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawDelta * ROTATE_GAIN);
+    worldGroup.quaternion.copy(yawQuat).multiply(drag.worldQuat);
+    const rawScale = dist / Math.max(drag.dist, 0.001);
+    const scaleFactor = THREE.MathUtils.clamp(Math.pow(rawScale, SCALE_GAIN), 0.4, 2.5);
+    worldGroup.scale.setScalar(drag.worldScale * scaleFactor);
+  }
   return true;
 }
 
@@ -540,7 +703,12 @@ renderer.setAnimationLoop(() => {
   const input = readXRInput();
   const dragging = updateWorldDrag(input);
 
-  if (!dragging && !roll) {
+  if (input.menuButton && !menuPrev) setMenuOpen(!menuOpen);
+  menuPrev = input.menuButton;
+  if (menuOpen) updateMenuHover();
+
+  // The menu captures the stick and trigger so they don't roll the cube.
+  if (!dragging && !roll && !menuOpen) {
     if (input.stick) {
       const mag = Math.hypot(input.stick.x, input.stick.y);
       if (mag < 0.3) stickReady = true;
