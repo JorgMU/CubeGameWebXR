@@ -172,6 +172,65 @@ panel.rotation.x = -Math.PI / 2;
 panel.position.set(0, 0.012, BOARD_SIZE / 2 + 0.35);
 worldGroup.add(panel);
 
+// --- Debug readout (small grey text) -------------------------------------------
+// Shows where the viewer is and how the board is posed. Both are in the same
+// scene (tracking-space) coordinates, so the numbers can be compared directly.
+// Toggle with the P key; refreshed a few times a second, not every frame.
+const DEBUG_SECONDS = 0.2;
+let debugVisible = true;
+let debugTimer = 0;
+const debugCanvas = document.createElement('canvas');
+debugCanvas.width = 1024; debugCanvas.height = 192;
+const debugCtx = debugCanvas.getContext('2d');
+const debugTexture = new THREE.CanvasTexture(debugCanvas);
+debugTexture.colorSpace = THREE.SRGBColorSpace;
+const debugPanelHeight = 1.8 * debugCanvas.height / debugCanvas.width;
+const debugPanel = new THREE.Mesh(
+  new THREE.PlaneGeometry(1.8, debugPanelHeight),
+  new THREE.MeshBasicMaterial({ map: debugTexture, transparent: true, side: THREE.DoubleSide })
+);
+debugPanel.rotation.x = -Math.PI / 2;
+// Directly beyond the status panel, which spans z = BOARD_SIZE/2 + 0.10 .. + 0.60.
+debugPanel.position.set(0, 0.012, BOARD_SIZE / 2 + 0.6 + debugPanelHeight / 2);
+worldGroup.add(debugPanel);
+const hudDebug = document.getElementById('hudDebug');
+
+const dbgPos = new THREE.Vector3();
+const dbgQuat = new THREE.Quaternion();
+const dbgEuler = new THREE.Euler();
+const RAD2DEG = 180 / Math.PI;
+
+// Euler order YXZ reads as yaw (turn about the vertical axis), then tilt
+// forward/back (pitch, about x), then tilt side to side (roll, about z).
+// Positive yaw turns counterclockwise when seen from above.
+function debugLines() {
+  const viewer = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+  viewer.getWorldPosition(dbgPos);
+  viewer.getWorldQuaternion(dbgQuat);
+  dbgEuler.setFromQuaternion(dbgQuat, 'YXZ');
+  const player = `Player  x ${dbgPos.x.toFixed(2)}  y ${dbgPos.y.toFixed(2)}  z ${dbgPos.z.toFixed(2)}  facing ${(dbgEuler.y * RAD2DEG).toFixed(0)}°`;
+
+  const wp = worldGroup.position;
+  dbgEuler.setFromQuaternion(worldGroup.quaternion, 'YXZ');
+  const board = `Board   x ${wp.x.toFixed(2)}  y ${wp.y.toFixed(2)}  z ${wp.z.toFixed(2)}  scale ${worldGroup.scale.x.toFixed(2)}`;
+  const pose = `Board   yaw ${(dbgEuler.y * RAD2DEG).toFixed(0)}°  tilt fwd/back ${(dbgEuler.x * RAD2DEG).toFixed(0)}°  side ${(dbgEuler.z * RAD2DEG).toFixed(0)}°`;
+  return [player, board, pose];
+}
+
+function updateDebug() {
+  const lines = debugLines();
+  hudDebug.style.display = debugVisible ? 'block' : 'none';
+  debugPanel.visible = debugVisible;
+  if (!debugVisible) return;
+  hudDebug.textContent = lines.join('\n');
+  debugCtx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+  debugCtx.fillStyle = '#9a9a9a';
+  debugCtx.font = '34px Consolas, monospace';
+  debugCtx.textAlign = 'left';
+  lines.forEach((line, i) => debugCtx.fillText(line, 20, 52 + i * 50));
+  debugTexture.needsUpdate = true;
+}
+
 // --- Game state ---------------------------------------------------------------
 let level = 1;
 let cubeCol = START_COL;
@@ -373,6 +432,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'e') worldGroup.rotateY(-Math.PI / 12);
   else if (k === '=' || k === '+') worldGroup.scale.multiplyScalar(1.1);
   else if (k === '-' || k === '_') worldGroup.scale.multiplyScalar(0.9);
+  else if (k === 'p') { debugVisible = !debugVisible; updateDebug(); }
   else if (k === '0') {
     worldGroup.position.copy(WORLD_HOME);
     worldGroup.quaternion.identity();
@@ -464,6 +524,8 @@ generateLevel();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
 
+  debugTimer += dt;
+  if (debugTimer >= DEBUG_SECONDS) { debugTimer = 0; updateDebug(); }
   if (roll) {
     roll.t += dt;
     const pRaw = Math.min(roll.t / ROLL_SECONDS, 1);

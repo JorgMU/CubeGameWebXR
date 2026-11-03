@@ -47,6 +47,7 @@ and Purple west.
 - Q / E: rotate the world.
 - + / - or mouse wheel: scale the world (scroll up / + enlarges ×1.1, scroll down / - shrinks ×0.9).
 - 0: reset world position, rotation, and scale.
+- P: show/hide the debug readout (small grey text; see "Debug readout" below).
 - N: next level. R: restart the current level (same pattern, icons restored).
 - The HTML buttons in the top-left do Next level / Restart level.
 
@@ -113,6 +114,25 @@ py -m http.server 8001 --directory app
 
 Then open `http://localhost:8001` on desktop for logic testing. For the
 Quest, you still need an HTTPS URL (see Option A).
+
+## Debug readout
+
+Small grey text, shown in the HTML HUD (top-left, desktop) and in the world
+just beyond the status text. Refreshed about 5 times a second. P toggles it.
+
+- **Player** — where the view is from: x/y/z in metres, and `facing`, the
+  head's turn about the vertical axis (positive = counterclockwise from above).
+  In VR this is your headset; on desktop it is the fixed testing camera.
+- **Board** — the game world's position (x/y/z) and scale.
+- **Board yaw / tilt** — rotation of the board: yaw is the turn about the
+  vertical axis; `tilt fwd/back` and `side` are the pitch and roll, which are
+  always 0° for now because only yaw is implemented.
+
+Player and board are separate things in the same coordinate space. The player
+is the camera (tracked by the headset; you move it by walking). The board is
+`worldGroup` (moved by the two-grip drag or Ctrl+Arrow/Q/E/+/-). Moving the
+board never changes the player numbers, and walking never changes the board
+numbers; what you see is the difference between them.
 
 ## Files
 
