@@ -39,6 +39,9 @@ and Purple west.
     - move your hands apart to enlarge the world, together to shrink it.
   - Adding or releasing a grip re-anchors the drag, so the world never jumps;
     release all grips to end it.
+  - **Tilt**: while either grip is held, pull a thumbstick back to tilt the board
+    up toward you, push forward to lay it down, in 5° steps (repeating while
+    held) from 0° (flat, face up) to 180°; 90° faces you. Reset view returns to 0°.
   - To the player this feels like the world moving around them; it is
     implemented as moving the board/cube/icon group, which is the same
     relative motion as moving the player the opposite way.
@@ -135,8 +138,7 @@ just beyond the status text. Refreshed about 5 times a second. P toggles it.
   In VR this is your headset; on desktop it is the fixed testing camera.
 - **Board** — the game world's position (x/y/z) and scale.
 - **Board yaw / tilt** — rotation of the board: yaw is the turn about the
-  vertical axis; `tilt fwd/back` and `side` are the pitch and roll, which are
-  always 0° for now because only yaw is implemented.
+  vertical axis; tilt is 0° flat (face up) to 180°, with 90° facing the player.
 - **Left buttons down** — button indices currently pressed on the left
   controller (for finding out which buttons the Quest browser exposes).
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
 // ---------------------------------------------------------------------------
 // Cube Game WebXR — v5, 10x10 board
@@ -82,6 +83,24 @@ const WORLD_HOME = new THREE.Vector3(0, 0.5, -2.0);
 const VR_HOME_SCALE = 0.75; // board scale when an immersive session starts
 // Rotation/scale gain for the two-grip drag (1 = hands map 1:1).
 const ROTATE_GAIN = 0.4, SCALE_GAIN = 0.4;
+// Board tilt about its own left-right axis: 0 = flat face up, 90 = facing the
+// player, 180 = upside down. Changed in steps while a grip is held.
+const TILT_STEP = 5, TILT_MAX = 180, TILT_REPEAT_SECONDS = 0.2;
+let tiltDeg = 0;
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const TILT_AXIS = new THREE.Vector3(1, 0, 0);
+let tiltReady = true, tiltTimer = 0;
+
+// Tilt about the board's own left-right axis; positive raises the far edge.
+function stepTilt(dir) {
+  const next = THREE.MathUtils.clamp(tiltDeg + dir * TILT_STEP, 0, TILT_MAX);
+  if (next === tiltDeg) return;
+  const q = new THREE.Quaternion().setFromAxisAngle(TILT_AXIS, (next - tiltDeg) * Math.PI / 180);
+  worldGroup.quaternion.multiply(q);
+  if (drag) drag.worldQuat.multiply(q);
+  tiltDeg = next;
+  updateDebug();
+}
 worldGroup.position.copy(WORLD_HOME);
 scene.add(worldGroup);
 
@@ -201,6 +220,7 @@ const hudDebug = document.getElementById('hudDebug');
 const dbgPos = new THREE.Vector3();
 const dbgQuat = new THREE.Quaternion();
 const dbgEuler = new THREE.Euler();
+const dbgAxis = new THREE.Vector3();
 const RAD2DEG = 180 / Math.PI;
 
 // Euler order YXZ reads as yaw (turn about the vertical axis), then tilt
@@ -216,7 +236,9 @@ function debugLines() {
   const wp = worldGroup.position;
   dbgEuler.setFromQuaternion(worldGroup.quaternion, 'YXZ');
   const board = `Board   x ${wp.x.toFixed(2)}  y ${wp.y.toFixed(2)}  z ${wp.z.toFixed(2)}  scale ${worldGroup.scale.x.toFixed(2)}`;
-  const pose = `Board   yaw ${(dbgEuler.y * RAD2DEG).toFixed(0)}°  tilt fwd/back ${(dbgEuler.x * RAD2DEG).toFixed(0)}°  side ${(dbgEuler.z * RAD2DEG).toFixed(0)}°`;
+  const boardX = dbgAxis.set(1, 0, 0).applyQuaternion(worldGroup.quaternion);
+  const yawDeg = Math.atan2(-boardX.z, boardX.x) * RAD2DEG;
+  const pose = `Board   yaw ${yawDeg.toFixed(0)}°  tilt ${tiltDeg}° (0 flat, 90 facing you)`;
   const buttons = `Left buttons down: ${leftButtonsDown || '-'}`;
   return [player, board, pose, buttons];
 }
@@ -432,8 +454,8 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'arrowright' || k === 'd') tryRoll('east');
   else if (k === 'n') nextLevel();
   else if (k === 'r') restartLevel();
-  else if (k === 'q') worldGroup.rotateY(Math.PI / 12);
-  else if (k === 'e') worldGroup.rotateY(-Math.PI / 12);
+  else if (k === 'q') worldGroup.rotateOnWorldAxis(WORLD_UP, Math.PI / 12);
+  else if (k === 'e') worldGroup.rotateOnWorldAxis(WORLD_UP, -Math.PI / 12);
   else if (k === '=' || k === '+') worldGroup.scale.multiplyScalar(1.1);
   else if (k === '-' || k === '_') worldGroup.scale.multiplyScalar(0.9);
   else if (k === 'p') { debugVisible = !debugVisible; updateDebug(); }
@@ -441,6 +463,7 @@ window.addEventListener('keydown', (e) => {
     if (renderer.xr.isPresenting) { resetWorldForVR(); return; }
     worldGroup.position.copy(WORLD_HOME);
     worldGroup.quaternion.identity();
+    tiltDeg = 0;
     worldGroup.scale.setScalar(1);
   }
 });
@@ -458,14 +481,12 @@ document.getElementById('btnRestart').addEventListener('click', restartLevel);
 const controller0 = renderer.xr.getController(0);
 const controller1 = renderer.xr.getController(1);
 scene.add(controller0, controller1);
-// Simple stand-in for the controllers, which the browser does not draw.
-for (const c of [controller0, controller1]) {
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.04, 0.04, 0.14),
-    new THREE.MeshBasicMaterial({ color: 0x8a8a8a })
-  );
-  body.position.z = 0.03;
-  c.add(body);
+// The browser doesn't draw controllers; load the standard Quest models.
+const controllerModelFactory = new XRControllerModelFactory();
+for (const i of [0, 1]) {
+  const grip = renderer.xr.getControllerGrip(i);
+  grip.add(controllerModelFactory.createControllerModel(grip));
+  scene.add(grip);
 }
 
 let stickReady = true;
@@ -480,12 +501,14 @@ const gripHeld = [false, false];
   controller.addEventListener('squeezestart', () => { gripHeld[i] = true; });
   controller.addEventListener('squeezeend', () => { gripHeld[i] = false; });
 });
-// Immersive start: centred on the board, no rotation, slightly smaller board.
-const VR_HOME = new THREE.Vector3(0, 0.5, -2.0);
+// Immersive start: centred on the board, tilted 30°, slightly smaller board.
+const VR_HOME = new THREE.Vector3(0, 0.5, -2.5);
+const VR_HOME_TILT = 30;
 const IDENTITY_Q = new THREE.Quaternion();
 function resetWorldForVR() {
   worldGroup.position.copy(VR_HOME);
-  worldGroup.quaternion.identity();
+  worldGroup.quaternion.setFromAxisAngle(TILT_AXIS, VR_HOME_TILT * Math.PI / 180);
+  tiltDeg = VR_HOME_TILT;
   worldGroup.scale.setScalar(VR_HOME_SCALE);
 }
 renderer.xr.addEventListener('sessionstart', resetWorldForVR);
@@ -706,6 +729,21 @@ renderer.setAnimationLoop(() => {
   if (input.menuButton && !menuPrev) setMenuOpen(!menuOpen);
   menuPrev = input.menuButton;
   if (menuOpen) updateMenuHover();
+
+  // Grip held: the stick's forward/back axis tilts the board instead of rolling.
+  // Pull back raises the board toward you; push forward lays it flat.
+  if (dragging && input.stick && !menuOpen) {
+    const y = input.stick.y;
+    if (Math.abs(y) < 0.3) { tiltReady = true; tiltTimer = 0; }
+    else if (Math.abs(y) > 0.6) {
+      tiltTimer -= dt;
+      if (tiltReady || tiltTimer <= 0) {
+        stepTilt(y > 0 ? 1 : -1);
+        tiltReady = false;
+        tiltTimer = TILT_REPEAT_SECONDS;
+      }
+    }
+  } else { tiltReady = true; tiltTimer = 0; }
 
   // The menu captures the stick and trigger so they don't roll the cube.
   if (!dragging && !roll && !menuOpen) {
