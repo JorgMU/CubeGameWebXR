@@ -48,10 +48,13 @@ and Purple west.
 - **Trigger** after a win: starts the next level.
 - **Left menu button or Y button**: opens/closes a small menu attached to the left controller.
   Point the right controller at an item and pull its trigger: **Debug: On/Off**
-  toggles the debug readout, **Reset view** returns the board to the VR start
+  toggles the debug readout, **Sky: <mode>** shows the mode a click will switch to (the debug readout shows the current one) and cycles the star map
+  between the tuned version, the unadjusted NASA data, a plain black background, and
+  (Quest, in the headset only) the real-world passthrough view, **Reset view**
+  returns the board to the VR start
   view, and **Exit VR** ends the immersive session. The menu closes after any
   selection. Choosing **Exit VR** shows a 3-second reminder on a panel facing
-  you above the table center at eye height. Look forward; the Quest resets its
+  you above the table center, 0.4 m above eye height so it clears the board. Look forward; the Quest resets its
   front direction to where you are looking when the immersive session ends.
   While the menu is open the thumbstick and trigger do not roll the cube or
   start a level.
@@ -65,6 +68,7 @@ and Purple west.
 - + / - or mouse wheel: scale the world (scroll up / + enlarges ×1.1, scroll down / - shrinks ×0.9).
 - 0: reset world position, rotation, and scale.
 - P: show/hide the debug readout (small grey text; see "Debug readout" below).
+- K: cycle the sky: adjusted, raw, off (black).
 - N: next level. R: restart the current level (same pattern, icons restored).
 - The HTML buttons in the top-left do Next level / Restart level.
 
@@ -79,14 +83,50 @@ CubeGameWebXR/                  repo root
   app/                          <-- web root: only this is served
     index.html                  served
     main.js                     served (loaded by index.html as ./main.js)
+    Assets/
+      starmap_2020_8k.jpg       served (adjusted sky, used when the GPU supports 8192 px textures)
+      starmap_2020_4k.jpg       served (adjusted sky fallback for smaller GPUs)
+      starmap_2020_8k_raw.jpg   served (unadjusted sky, 8k)
+      starmap_2020_4k_raw.jpg   served (unadjusted sky fallback)
 ```
 
-Only `app/index.html` and `app/main.js` need to be served. Nothing else
-is a web asset: icons are drawn on canvas in `main.js`, and
+`app/index.html`, `app/main.js`, and the sky images in `app/Assets/` need
+to be served. Icons are drawn on canvas in `main.js`, and
 Three.js r160 is loaded from a CDN via an import map in `index.html`.
 If you add assets later (textures, sounds, models), put them under
 `app/` — for example `app/Assets/` — so their relative URLs keep working
 from `index.html`.
+
+## Sky background
+
+The sky is a star map of the whole sky as seen from Earth, with the Milky
+Way, in celestial coordinates (north celestial pole straight up when the
+board is at its home orientation). It is painted on a large sphere (radius
+30 m) inside the board's group, so it moves, turns, tilts, and scales with the
+board: dragging the board drags the sky with it.
+
+The images are NASA's 8192×4096 "Deep Star Maps 2020" (NASA/Goddard Space
+Flight Center Scientific Visualization Studio, https://svs.gsfc.nasa.gov/4851/;
+Gaia DR2: ESA/Gaia/DPAC), converted from linear OpenEXR to JPEG, each with a
+4096×2048 copy for GPUs that cannot load 8192 px textures. In a headset
+resolution is what matters, which is why 8k is used when the GPU allows it.
+
+- **Adjusted** (default): subtracts the diffuse sky glow so the space between
+  stars is nearly black, then softens and brightens the stars slightly so they
+  do not shimmer as single pixels. Only the stars and a faint Milky Way remain.
+- **Raw**: only the linear-to-sRGB conversion, with no glow removal, gain, or
+  bloom. It is hazier and dimmer, with a bright Milky Way band.
+
+Cycle with the **Sky** menu item in VR, or K on desktop (Adjusted, Raw, Off =
+plain black, a solid black sphere with no texture in memory, because AR sessions
+ignore the scene background colour; Passthrough is added to the
+cycle only inside a headset session that blends with the real world). WebXR
+can't turn passthrough off inside a running session, so the page has two start
+buttons: **ENTER VR** (an `immersive-vr` session, no passthrough at all) and, when
+the browser supports it, **START AR** (an `immersive-ar` session, which adds the
+Passthrough mode). Only one 8k texture
+is held in GPU memory at a time. The sphere stays black until the first image
+loads.
 
 ## Run it
 
@@ -161,7 +201,8 @@ numbers; what you see is the difference between them.
 - `app/main.js` — the whole game: board, cube orientation and rolling
   animation, flat icons, level generation, thumbstick/grip input, and
   the in-world status text (flat in the board plane, just past the near
-  edge toward the player, no background or border).
+  edge toward the player, no background or border), and the sky background.
+- `app/Assets/starmap_2020_{8k,4k}[_raw].jpg` — the sky star maps (adjusted and raw; 8k preferred, 4k fallback).
 - `StartCubeGameWebXR.ps1` / `StopCubeGameWebXR.ps1` — local server +
   Cloudflare tunnel for Quest testing (repo root, not served).
 

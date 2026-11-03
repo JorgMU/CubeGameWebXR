@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
 // ---------------------------------------------------------------------------
@@ -15,7 +16,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@16:41:23';
+const BUILD_TIMESTAMP = '2026-11-03@17:23:09';
 const GRID = 10;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -56,16 +57,29 @@ function cellToLocal(col, row) {
 
 // --- Renderer / scene / camera (desktop fallback view) ---------------------
 const canvas = document.getElementById('renderCanvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
-document.body.appendChild(VRButton.createButton(renderer));
+// Passthrough can't be switched off inside a running session, so there are two
+// start buttons: a plain immersive-vr session (no passthrough at all) and an
+// immersive-ar session (adds the Passthrough sky mode).
+const vrButton = VRButton.createButton(renderer);
+document.body.appendChild(vrButton);
+(navigator.xr ? navigator.xr.isSessionSupported('immersive-ar').catch(() => false) : Promise.resolve(false))
+  .then((arSupported) => {
+    if (!arSupported) return;
+    const arButton = ARButton.createButton(renderer);
+    vrButton.style.left = 'calc(50% - 160px)';
+    arButton.style.left = 'calc(50% + 10px)';
+    document.body.appendChild(arButton);
+  });
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050510);
+scene.background = new THREE.Color(0x000000);
 
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
 camera.position.set(0, 4.2, 1.8);
 camera.lookAt(0, 1.0, -2.0);
 
@@ -82,6 +96,7 @@ scene.add(sun);
 const worldGroup = new THREE.Group();
 const WORLD_HOME = new THREE.Vector3(0, 0.5, -2.0);
 const VR_HOME_SCALE = 0.75; // board scale when an immersive session starts
+const EXIT_MESSAGE_RISE = 0.4; // metres above eye height, clear of the tilted board
 // Rotation/scale gain for the two-grip drag (1 = hands map 1:1).
 const ROTATE_GAIN = 0.4, SCALE_GAIN = 0.4;
 // Board tilt about its own left-right axis: 0 = flat face up, 90 = facing the
@@ -104,6 +119,70 @@ function stepTilt(dir) {
 }
 worldGroup.position.copy(WORLD_HOME);
 scene.add(worldGroup);
+
+// --- Sky ----------------------------------------------------------------------
+// NASA SVS "Deep Star Maps 2020" (celestial coordinates, north celestial pole
+// up): the whole sky as seen from Earth, on a big sphere inside worldGroup so
+// it moves, turns, tilts, and scales with the board. The radius keeps the
+// viewer inside the sphere over the whole drag-scale range (x0.4..x2.5) and
+// inside the camera far plane. Two versions: "adjusted" (glow removed, stars
+// softened and brightened) and "raw" (plain sRGB conversion of the NASA data).
+// Resolution is what matters in a headset: 8k when the GPU allows it, else 4k.
+const SKY_RADIUS = 30;
+const skySuffix = renderer.capabilities.maxTextureSize >= 8192 ? '8k' : '4k';
+const skyMaterial = new THREE.MeshBasicMaterial({ depthWrite: false, fog: false });
+const skyGeometry = new THREE.SphereGeometry(SKY_RADIUS, 96, 48);
+skyGeometry.scale(-1, 1, 1); // flips the faces so the inside shows, with the map the right way round
+const skyMesh = new THREE.Mesh(skyGeometry, skyMaterial);
+skyMesh.renderOrder = -1;
+skyMesh.visible = false; // until the first texture arrives
+worldGroup.add(skyMesh);
+
+const SKY_MODES = ['Adjusted', 'Raw', 'Off', 'Passthrough'];
+const SKY_MESSAGES = ['adjusted', 'raw (unadjusted NASA data)', 'off (black)', 'passthrough'];
+let skyMode = 0;
+let skyRequest = 0;
+// Passthrough needs an immersive-ar session whose display blends with the real world.
+function passthroughAvailable() {
+  const session = renderer.xr.isPresenting ? renderer.xr.getSession() : null;
+  return !!session && session.environmentBlendMode !== undefined && session.environmentBlendMode !== 'opaque';
+}
+function nextSkyMode() {
+  return (skyMode + 1) % (passthroughAvailable() ? SKY_MODES.length : SKY_MODES.length - 1);
+}
+function loadSky() {
+  const request = ++skyRequest;
+  scene.background = skyMode === 3 ? null : new THREE.Color(0x000000);
+  if (skyMode >= 2) { // no texture; Off is a solid black sphere (AR sessions ignore scene.background), passthrough shows the room
+    skyMaterial.color.set(0x000000);
+    skyMesh.visible = skyMode === 2;
+    if (skyMaterial.map) {
+      skyMaterial.map.dispose();
+      skyMaterial.map = null;
+    }
+    skyMaterial.needsUpdate = true;
+    return;
+  }
+  const file = `./Assets/starmap_2020_${skySuffix}${skyMode === 0 ? '' : '_raw'}.jpg`;
+  new THREE.TextureLoader().load(file, (texture) => {
+    if (request !== skyRequest) { texture.dispose(); return; }
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const old = skyMaterial.map;
+    skyMaterial.map = texture;
+    skyMaterial.color.set(0xffffff);
+    skyMaterial.needsUpdate = true;
+    skyMesh.visible = true;
+    if (old) old.dispose(); // one 8k texture at a time keeps GPU memory down
+  });
+}
+function toggleSky() {
+  skyMode = nextSkyMode();
+  loadSky();
+  message = `Sky: ${SKY_MESSAGES[skyMode]}.`;
+  updateHUD();
+}
+loadSky();
 
 // Transparent board: faint plane + grid lines.
 const boardPlane = new THREE.Mesh(
@@ -203,7 +282,7 @@ const DEBUG_SECONDS = 0.2;
 let debugVisible = true;
 let debugTimer = 0;
 const debugCanvas = document.createElement('canvas');
-debugCanvas.width = 1024; debugCanvas.height = 300;
+debugCanvas.width = 1024; debugCanvas.height = 350;
 const debugCtx = debugCanvas.getContext('2d');
 const debugTexture = new THREE.CanvasTexture(debugCanvas);
 debugTexture.colorSpace = THREE.SRGBColorSpace;
@@ -241,7 +320,7 @@ function debugLines() {
   const yawDeg = Math.atan2(-boardX.z, boardX.x) * RAD2DEG;
   const pose = `Board   yaw ${yawDeg.toFixed(0)}°  tilt ${tiltDeg}° (0 flat, 90 facing you)`;
   const buttons = `Left buttons down: ${leftButtonsDown || '-'}`;
-  return [`Build   ${BUILD_TIMESTAMP}`, player, board, pose, buttons];
+  return [`Build   ${BUILD_TIMESTAMP}`, `Sky     ${SKY_MODES[skyMode]}`, player, board, pose, buttons];
 }
 
 function updateDebug() {
@@ -462,6 +541,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === '=' || k === '+') worldGroup.scale.multiplyScalar(1.1);
   else if (k === '-' || k === '_') worldGroup.scale.multiplyScalar(0.9);
   else if (k === 'p') { debugVisible = !debugVisible; updateDebug(); }
+  else if (k === 'k') toggleSky();
   else if (k === '0') {
     if (renderer.xr.isPresenting) { resetWorldForVR(); return; }
     worldGroup.position.copy(WORLD_HOME);
@@ -505,7 +585,7 @@ const gripHeld = [false, false];
   controller.addEventListener('squeezeend', () => { gripHeld[i] = false; });
 });
 // Immersive start: centred on the board, tilted 30°, slightly smaller board.
-const VR_HOME = new THREE.Vector3(0, 0.5, -2.5);
+const VR_HOME = new THREE.Vector3(0, -0.1, -1.75);
 const VR_HOME_TILT = 30;
 const IDENTITY_Q = new THREE.Quaternion();
 function resetWorldForVR() {
@@ -520,6 +600,7 @@ renderer.xr.addEventListener('sessionend', () => {
   exitTimer = null;
   gripHeld.fill(false); drag = null; exitPending = false;
   exitMessageMesh.visible = false;
+  if (skyMode === 3) { skyMode = 0; loadSky(); } // passthrough only exists inside the session
   setMenuOpen(false);
 });
 
@@ -529,10 +610,10 @@ renderer.xr.addEventListener('sessionend', () => {
 // pressing its trigger.
 // Button indices measured on the Quest browser, left Touch controller.
 const MENU_TOGGLE_BUTTONS = [12, 5]; // 12 = menu button, 5 = Y
-const MENU_ROWS = 3;
+const MENU_ROWS = 4;
 const MENU_W = 512, MENU_H = 20 + MENU_ROWS * 150;
 let menuOpen = false;
-let menuHover = -1; // -1 none, 0 Debug, 1 Reset view, 2 Exit VR
+let menuHover = -1; // -1 none, 0 Debug, 1 Sky, 2 Reset view, 3 Exit VR
 let menuPrev = false;
 let exitPending = false;
 let exitTimer = null;
@@ -603,7 +684,7 @@ function attachMenu() {
 
 function drawMenu() {
   menuCtx.clearRect(0, 0, MENU_W, MENU_H);
-  const rows = [`Debug: ${debugVisible ? 'On' : 'Off'}`, 'Reset view', 'Exit VR'];
+  const rows = [`Debug: ${debugVisible ? 'On' : 'Off'}`, `Sky: ${SKY_MODES[nextSkyMode()]}`, 'Reset view', 'Exit VR'];
   rows.forEach((label, i) => {
     const y = 20 + i * 150;
     menuCtx.fillStyle = i === menuHover ? '#3498db' : 'rgba(20,20,30,0.92)';
@@ -658,13 +739,15 @@ function activateMenuItem() {
     debugVisible = !debugVisible;
     updateDebug();
   } else if (selected === 1) {
+    toggleSky();
+  } else if (selected === 2) {
     const atHome = worldGroup.position.distanceTo(VR_HOME) < 0.005
       && Math.abs(worldGroup.scale.x - VR_HOME_SCALE) < 0.005
       && worldGroup.quaternion.angleTo(IDENTITY_Q) < 0.005;
     if (atHome) message = 'View is already at the home position.';
     else { resetWorldForVR(); message = 'View reset.'; }
     updateHUD();
-  } else if (selected === 2) {
+  } else if (selected === 3) {
     const session = renderer.xr.getSession();
     if (session) {
       exitPending = true;
@@ -781,7 +864,7 @@ renderer.setAnimationLoop(() => {
   if (exitPending) {
     const viewerPosition = renderer.xr.getCamera(camera).getWorldPosition(new THREE.Vector3());
     worldGroup.getWorldPosition(exitMessageMesh.position);
-    exitMessageMesh.position.y = viewerPosition.y;
+    exitMessageMesh.position.y = viewerPosition.y + EXIT_MESSAGE_RISE;
     exitMessageMesh.lookAt(viewerPosition);
     if (message !== EXIT_VR_MESSAGE) {
       message = EXIT_VR_MESSAGE;
