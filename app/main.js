@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 
 // ---------------------------------------------------------------------------
-// Cube Game WebXR — v1
-// A horizontal 5x5 board floating in front of the player. Roll a cube with a
+// Cube Game WebXR — v1, 10x10 board
+// A horizontal 10x10 board floating in front of the player. Roll a cube with a
 // different colour on each face. A square clears only when the cube's
 // FACE-DOWN face matches that square's flat icon. Clear all coloured
 // squares to finish the level. No timer, no lose condition in v1.
@@ -13,13 +13,19 @@ import { VRButton } from 'three/addons/webxr/VRButton.js';
 // ---------------------------------------------------------------------------
 
 const GRID = 10;
-const CELL = 0.4;
-const BOARD_SIZE = GRID * CELL; // 2.0 m
+// Board size is the anchor: CELL is derived from it, so increasing GRID
+// shrinks the cells (and the cube and icons, which are sized from CELL)
+// instead of growing the board. Change BOARD_SIZE, not CELL, if you want
+// a physically larger or smaller board.
+const BOARD_SIZE = 2.0; // m, board footprint — unchanged from the 5x5 version
+const CELL = BOARD_SIZE / GRID; // 0.2 m for a 10x10 board
 const CUBE = CELL; // cube fills a cell, so rolling over its edge lands centred
 const COLORED_FRACTION = 0.5;
 const ROLL_SECONDS = 0.28;
-const START_COL = 2;
-const START_ROW = 2;
+// For an even grid there is no single centre cell, so start on the
+// south-east of the central four (col/row 5, one half-cell off true centre).
+const START_COL = Math.floor(GRID / 2);
+const START_ROW = Math.floor(GRID / 2);
 
 // Colour order is also the cube-face index order.
 const COLORS = [
@@ -36,7 +42,12 @@ const INITIAL_ORIENTATION = { up: 2, down: 5, north: 1, south: 3, east: 0, west:
 // North = -z (away from player), south = +z (toward player).
 
 function cellToLocal(col, row) {
-  return new THREE.Vector3((col - 2) * CELL, 0, (row - 2) * CELL);
+  // Centre the logical grid on the board centre for ANY grid size.
+  // The old code hard-coded (col - 2), which was only correct for 5x5:
+  // with GRID = 10 it shifted every icon and the cube +1.0 m east/south
+  // and let col/row 9 spill past the board edge.
+  const centre = (GRID - 1) / 2; // 4.5 for a 10x10 board
+  return new THREE.Vector3((col - centre) * CELL, 0, (row - centre) * CELL);
 }
 
 // --- Renderer / scene / camera (desktop fallback view) ---------------------

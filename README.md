@@ -4,8 +4,10 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 
 ## The game
 
-- A horizontal 5×5 board floats in front of you. It is transparent except
-  for its grid lines.
+- A horizontal 10×10 board floats in front of you. It is transparent except
+  for its grid lines. The board footprint is still 2 m, so each cell is
+  0.2 m — to change the board size, change `BOARD_SIZE` in `main.js`,
+  not `CELL`, and the cells, cube, and icons will scale with it.
 - A cube has a different colour on each of its 6 faces:
   Red, Green, Blue, Yellow, Purple, Orange.
 - Each coloured square shows a **flat icon lying in the plane of the board**
@@ -15,7 +17,7 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
   cube's face-down face matches that square's icon colour**.
 - The level ends when every coloured square is cleared.
 - A new level is a new random pattern: about 50% of squares coloured,
-  the rest blank (the centre start square is always blank). There is no
+  the rest blank (the start square is always blank). There is no
   timer and no lose condition in v1. Rolling off the edge is blocked.
 
 ## Controls
