@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 
 // ---------------------------------------------------------------------------
-// Cube Game WebXR — v1, 10x10 board
+// Cube Game WebXR — v5, 10x10 board
 // A horizontal 10x10 board floating in front of the player. Roll a cube with a
 // different colour on each face. A square clears only when the cube's
 // FACE-DOWN face matches that square's flat icon. Clear all coloured
-// squares to finish the level. No timer, no lose condition in v1.
+// squares to finish the level. No timer or lose condition.
 // Controls: Quest thumbstick rolls; hold BOTH grips to drag the world
 // (translate / yaw-rotate / scale). Desktop: arrows/WASD roll, Q/E rotate,
 // +/- scale, N next level, R restart level, 0 reset world transform,

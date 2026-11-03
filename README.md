@@ -1,4 +1,4 @@
-# Cube Game WebXR — v1
+# Cube Game WebXR — v5
 
 A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 
@@ -17,8 +17,14 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
   cube's face-down face matches that square's icon colour**.
 - The level ends when every coloured square is cleared.
 - A new level is a new random pattern: about 50% of squares coloured,
-  the rest blank (the start square is always blank). There is no
-  timer and no lose condition in v1. Rolling off the edge is blocked.
+  the rest blank (the start square is always blank). Generation
+  guarantees at least 6 coloured squares. There is no timer and no lose
+  condition in the current version. Rolling off the edge is blocked.
+
+The cube starts at column 5, row 5 (the south-east cell of the central
+four on an even-sized board). Its initial face orientation is: Blue up,
+Orange down, Green north (away from the player), Yellow south, Red east,
+and Purple west.
 
 ## Controls
 
@@ -130,7 +136,7 @@ Quest, you still need an HTTPS URL (see Option A).
 - `StartCubeGameWebXR.ps1` / `StopCubeGameWebXR.ps1` — local server +
   Cloudflare tunnel for Quest testing (repo root, not served).
 
-## Known v1 limits
+## Known limits
 
 - Level patterns are random and are not checked for solvability. Blank
   squares give room to manoeuvre and reorient the cube, and R restarts
@@ -138,3 +144,5 @@ Quest, you still need an HTTPS URL (see Option A).
 - World rotation is yaw only, to keep the board horizontal.
 - Desktop world-drag by mouse is not implemented; use Q/E, +/-, and 0.
 - No sound, no timer, no score, and no hand-tracking controls yet.
+- Desktop behavior has been tested; Quest controller input and two-grip
+  world dragging still need verification on a headset.

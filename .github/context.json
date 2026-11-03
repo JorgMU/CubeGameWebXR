@@ -7,7 +7,8 @@
     "Completed the Context Conflict Check; no conflicts were found.",
     "Created repository agent instructions and context, added /scratch/ to .gitignore, and created scratch/.",
     "Created the session transcript handoff files; public-repository sensitive-information scan is pending user transcript confirmation.",
-    "Tagged commit 2157ab467123b3d4801b36f235bb01b23e3b91a6 as v4 and verified it matches HEAD."
+    "Tagged commit 2157ab467123b3d4801b36f235bb01b23e3b91a6 as v4; later HEAD 9b5dc13 is identified by Muse as v5.",
+    "Reviewed and deleted scratch/Muse - CubeGameWebXR Project Summary.md after preserving its useful project and verification notes in README.md and this context file."
   ],
   "purpose": "A 90s-inspired cube-rolling puzzle for Meta Quest, played in the browser using WebXR.",
   "repository": {
@@ -18,11 +19,11 @@
     "name": "CubeGameWebXR",
     "description": "A WebXR cube-rolling puzzle for Meta Quest with a desktop testing mode.",
     "workspaceFolder": "C:\\Users\\jorgt\\OneDrive\\Documents\\CopilotStuff\\WebShinanigans\\CubeGameWebXR",
-    "status": "Current HEAD 2157ab467123b3d4801b36f235bb01b23e3b91a6 is tagged v4."
+    "status": "Muse identifies current HEAD 9b5dc13 as v5; v4 remains tagged at 2157ab467123b3d4801b36f235bb01b23e3b91a6."
   },
   "currentPosition": {
     "status": "Complete",
-    "focus": "Tagged the latest commit as v4.",
+    "focus": "Reviewed and removed the redundant Muse project summary, preserving useful details.",
     "nextStep": "Paste this session's transcript into Conversations/Chat_2026-11-03A.txt and confirm when saved; the public-repository sensitive-information scan is pending."
   },
   "currentSession": {
@@ -38,7 +39,12 @@
     "step2": "Keep runtime assets under app/ and validate behavior in the documented desktop or Quest workflow."
   },
   "technicalNotes": {
-    "externalDataHandling": "Three.js r160 is loaded from jsDelivr; only app/ is served by the included local server."
+    "externalDataHandling": "Three.js r160 is loaded from jsDelivr; only app/ is served by the included local server.",
+    "currentVersion": "Muse identifies HEAD 9b5dc13 as v5; v4 is the prior tagged commit 2157ab467123b3d4801b36f235bb01b23e3b91a6.",
+    "gameGeometry": "10x10 grid on a 2.0 m board; CELL is derived as BOARD_SIZE / GRID. The cube starts at column 5, row 5, and generated levels have at least 6 coloured cells.",
+    "initialCubeOrientation": "Up Blue, down Orange, north Green, south Yellow, east Red, west Purple.",
+    "worldTransform": "Board, cube, icons, and status text share worldGroup, whose home position is (0, 1.0, -2.0); desktop camera is at (0, 4.2, 1.8) looking at (0, 1.0, -2.0).",
+    "verificationStatus": "Desktop behavior was tested; Quest thumbstick direction and two-grip drag still need hardware verification."
   },
   "userPreferences": {
     "guidedTransparency": "Keep responses short and direct; report work and validation clearly.",
