@@ -16,7 +16,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@17:23:09';
+const BUILD_TIMESTAMP = '2026-11-03@17:39:18';
 const GRID = 10;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -94,8 +94,20 @@ scene.add(sun);
 // instead of orbiting it around the player. Dragging this group is, to the
 // player, the same as moving the player the opposite way.
 const worldGroup = new THREE.Group();
-const WORLD_HOME = new THREE.Vector3(0, 0.5, -2.0);
-const VR_HOME_SCALE = 0.75; // board scale when an immersive session starts
+// Home poses for the board, one per display mode, all in one place.
+// position is in metres relative to the player's floor origin; tilt is degrees
+// (0 flat, 90 facing the player). MR = an immersive-ar session (blended with
+// the real world); VR = an opaque immersive-vr session.
+const HOMES = {
+  desktop: { position: new THREE.Vector3(0, 0.5, -2.0), tilt: 0, scale: 1 },
+  mr: { position: new THREE.Vector3(0, -0.1, -1.75), tilt: 30, scale: 0.75 },
+  vr: { position: new THREE.Vector3(0, 0.75, -1.75), tilt: 30, scale: 0.75 },
+};
+function currentHome() {
+  const session = renderer.xr.getSession();
+  if (!session) return HOMES.desktop;
+  return session.environmentBlendMode === 'opaque' ? HOMES.vr : HOMES.mr;
+}
 const EXIT_MESSAGE_RISE = 0.4; // metres above eye height, clear of the tilted board
 // Rotation/scale gain for the two-grip drag (1 = hands map 1:1).
 const ROTATE_GAIN = 0.4, SCALE_GAIN = 0.4;
@@ -117,7 +129,7 @@ function stepTilt(dir) {
   tiltDeg = next;
   updateDebug();
 }
-worldGroup.position.copy(WORLD_HOME);
+worldGroup.position.copy(HOMES.desktop.position);
 scene.add(worldGroup);
 
 // --- Sky ----------------------------------------------------------------------
@@ -544,10 +556,10 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'k') toggleSky();
   else if (k === '0') {
     if (renderer.xr.isPresenting) { resetWorldForVR(); return; }
-    worldGroup.position.copy(WORLD_HOME);
+    worldGroup.position.copy(HOMES.desktop.position);
     worldGroup.quaternion.identity();
     tiltDeg = 0;
-    worldGroup.scale.setScalar(1);
+    worldGroup.scale.setScalar(HOMES.desktop.scale);
   }
 });
 // Mouse wheel scales the world, exactly like +/- on the keyboard:
@@ -573,6 +585,8 @@ for (const i of [0, 1]) {
 }
 
 let stickReady = true;
+let stickTimer = 0;
+const STICK_REPEAT_SECONDS = 0.5; // one square per half second while the stick is held
 let triggerPrev = false;
 let drag = null; // {mode: 0 | 1 | 'both', mid, angle, dist, worldPos, worldQuat, worldScale}
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpMid = new THREE.Vector3();
@@ -584,15 +598,14 @@ const gripHeld = [false, false];
   controller.addEventListener('squeezestart', () => { gripHeld[i] = true; });
   controller.addEventListener('squeezeend', () => { gripHeld[i] = false; });
 });
-// Immersive start: centred on the board, tilted 30°, slightly smaller board.
-const VR_HOME = new THREE.Vector3(0, -0.1, -1.75);
-const VR_HOME_TILT = 30;
-const IDENTITY_Q = new THREE.Quaternion();
+// Immersive start: centred on the board, tilted, slightly smaller board (see HOMES).
+const homeQuat = (home) => new THREE.Quaternion().setFromAxisAngle(TILT_AXIS, home.tilt * Math.PI / 180);
 function resetWorldForVR() {
-  worldGroup.position.copy(VR_HOME);
-  worldGroup.quaternion.setFromAxisAngle(TILT_AXIS, VR_HOME_TILT * Math.PI / 180);
-  tiltDeg = VR_HOME_TILT;
-  worldGroup.scale.setScalar(VR_HOME_SCALE);
+  const home = currentHome();
+  worldGroup.position.copy(home.position);
+  worldGroup.quaternion.copy(homeQuat(home));
+  tiltDeg = home.tilt;
+  worldGroup.scale.setScalar(home.scale);
 }
 renderer.xr.addEventListener('sessionstart', resetWorldForVR);
 renderer.xr.addEventListener('sessionend', () => {
@@ -741,9 +754,10 @@ function activateMenuItem() {
   } else if (selected === 1) {
     toggleSky();
   } else if (selected === 2) {
-    const atHome = worldGroup.position.distanceTo(VR_HOME) < 0.005
-      && Math.abs(worldGroup.scale.x - VR_HOME_SCALE) < 0.005
-      && worldGroup.quaternion.angleTo(IDENTITY_Q) < 0.005;
+    const home = currentHome();
+    const atHome = worldGroup.position.distanceTo(home.position) < 0.005
+      && Math.abs(worldGroup.scale.x - home.scale) < 0.005
+      && worldGroup.quaternion.angleTo(homeQuat(home)) < 0.005;
     if (atHome) message = 'View is already at the home position.';
     else { resetWorldForVR(); message = 'View reset.'; }
     updateHUD();
@@ -900,13 +914,18 @@ renderer.setAnimationLoop(() => {
   if (!dragging && !roll && !menuOpen) {
     if (input.stick) {
       const mag = Math.hypot(input.stick.x, input.stick.y);
-      if (mag < 0.3) stickReady = true;
-      else if (mag > 0.6 && stickReady) {
-        stickReady = false;
-        if (Math.abs(input.stick.x) > Math.abs(input.stick.y)) {
-          tryRoll(input.stick.x > 0 ? 'east' : 'west');
-        } else {
-          tryRoll(input.stick.y > 0 ? 'south' : 'north');
+      if (mag < 0.3) { stickReady = true; stickTimer = 0; }
+      else if (mag > 0.6) {
+        // Fires on the first push, then repeats while held.
+        stickTimer -= dt;
+        if (stickReady || stickTimer <= 0) {
+          stickReady = false;
+          stickTimer = STICK_REPEAT_SECONDS;
+          if (Math.abs(input.stick.x) > Math.abs(input.stick.y)) {
+            tryRoll(input.stick.x > 0 ? 'east' : 'west');
+          } else {
+            tryRoll(input.stick.y > 0 ? 'south' : 'north');
+          }
         }
         // Quest thumbstick, standard profile: pushing forward gives
         // axes y = -1, so y > 0 is south (toward the player) and

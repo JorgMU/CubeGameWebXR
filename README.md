@@ -29,7 +29,7 @@ and Purple west.
 ## Controls
 
 ### Meta Quest (Quest Browser, WebXR)
-- **Thumbstick** (either controller): push to roll one square that way.
+- **Thumbstick** (either controller): push to roll one square that way; hold it to keep rolling one square every half second.
   Push forward = north (away from you), back = south, left/right as shown.
 - **Grips**: world drag.
   - **One grip** (either hand): the world follows that hand, translate only.
@@ -67,6 +67,9 @@ and Purple west.
 - Q / E: rotate the world.
 - + / - or mouse wheel: scale the world (scroll up / + enlarges ×1.1, scroll down / - shrinks ×0.9).
 - 0: reset world position, rotation, and scale.
+  Home poses for 2D, MR (`immersive-ar`) and VR (`immersive-vr`) are listed together
+  in the `HOMES` table near the top of `app/main.js`; the VR/MR one is used by the
+  Quest "Reset view" menu item and when a session starts.
 - P: show/hide the debug readout (small grey text; see "Debug readout" below).
 - K: cycle the sky: adjusted, raw, off (black).
 - N: next level. R: restart the current level (same pattern, icons restored).
