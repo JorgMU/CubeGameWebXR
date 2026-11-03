@@ -1,0 +1,5 @@
+# Local-only, never commit these if they ever land in the repo.
+*.log
+processes.json
+.DS_Store
+Thumbs.db
