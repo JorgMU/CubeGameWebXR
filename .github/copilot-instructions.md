@@ -33,15 +33,16 @@ At the start of each session:
 
 ## Session End Protocol
 
+Run this protocol **once per programming session**, only when the user says they are done working (for example, "wrapping up" or "end of session"). Do not run it after individual conversations or tasks. A programming session is one working sitting and uses a single `Chat_<date>` pair, even if it spans several conversations.
+
 ### Agent Actions
 
-1. ACTION: Create new `Chat_<date>.md` and `Chat_<date>.txt` files in the `Conversations/` folder.
-2. ACTION: If a previous session already has the same base date, append A-Z (for example, `Chat_2026-04-26A.md`) until the filename is unique.
-3. ACTION: Ensure the `Chat_<date>.md` file includes a complete session summary: what was requested, what was changed, validations performed, and key decisions.
-4. ACTION: Leave `Chat_<date>.txt` empty for the full raw conversation transcript to be pasted by the user.
-5. ACTION: Once the transcript file is created, explicitly tell the user the file is ready for the transcript handoff and that the agent will wait for confirmation before any scan that depends on the pasted transcript.
-6. ACTION: Update `.github/context.json` with `currentPosition`, `lastActions`, `lastUpdated`, and any useful context not already stored elsewhere.
-7. ACTION: Determine whether a sensitive-information scan is required.
+1. ACTION: Create `Chat_<date>.md` and `Chat_<date>.txt` in the `Conversations/` folder. If the pair for today's date already exists, update the `.md` in place instead of creating a new pair. Append A-Z (for example, `Chat_2026-04-26A.md`) only when the user explicitly confirms a separate session on the same date.
+2. ACTION: Ensure the `Chat_<date>.md` file includes one consolidated summary for the whole session: what was requested, what was changed, validations performed, and key decisions.
+3. ACTION: Leave a new `Chat_<date>.txt` empty for the full raw conversation transcript to be pasted by the user. Never overwrite a `.txt` that already has content.
+4. ACTION: Once the transcript file is ready, explicitly tell the user the file is ready for the transcript handoff and that the agent will wait for confirmation before any scan that depends on the pasted transcript.
+5. ACTION: Update `.github/context.json` with `currentPosition`, `lastActions`, `lastUpdated`, and any useful context not already stored elsewhere.
+6. ACTION: Determine whether a sensitive-information scan is required.
    - First read `.github/context.json` and use `repository.visibilityIntent` when present.
    - If intent is `public`, scan is required.
    - If intent is `private` or `internal`, skip scan unless the user explicitly requests it.
@@ -49,10 +50,10 @@ At the start of each session:
      - Preferred: `gh repo view --json visibility -q .visibility`
      - Fallback: infer from authenticated GitHub API if possible.
      - If visibility still cannot be determined, treat as public for safety.
-8. ACTION: After the user pastes the latest conversation into the appropriate `Chat_<date>.txt` file and confirms it is saved, run a sensitive-information check only when scanning is required by Step 7.
+7. ACTION: After the user pastes the latest conversation into the appropriate `Chat_<date>.txt` file and confirms it is saved, run a sensitive-information check only when scanning is required by Step 6.
    - Scope: only version-controlled files in the repo.
    - If sensitive information is found, alert the user and halt publishing until resolved.
-9. ACTION: Stage any modified files.
+8. ACTION: Stage any modified files.
 
 ### Reminders (do not execute)
 

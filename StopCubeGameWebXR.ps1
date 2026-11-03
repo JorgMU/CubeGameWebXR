@@ -5,7 +5,7 @@ $stateFile = Join-Path $stateDir 'processes.json'
 
 if (-not (Test-Path $stateFile)) {
     Write-Host "No saved process state found at $stateFile" -ForegroundColor Yellow
-    Write-Host "If needed, stop processes manually: Stop-Process -Name py,cloudflared" -ForegroundColor Yellow
+    Write-Host "If needed, find the server and tunnel with Get-Process py,cloudflared, then stop each by ID: Stop-Process -Id <PID>" -ForegroundColor Yellow
     return
 }
 

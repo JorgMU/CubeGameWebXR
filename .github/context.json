@@ -8,7 +8,10 @@
     "Created repository agent instructions and context, added /scratch/ to .gitignore, and created scratch/.",
     "Created the session transcript handoff files; public-repository sensitive-information scan is pending user transcript confirmation.",
     "Tagged commit 2157ab467123b3d4801b36f235bb01b23e3b91a6 as v4; later HEAD 9b5dc13 is identified by Muse as v5.",
-    "Reviewed and deleted scratch/Muse - CubeGameWebXR Project Summary.md after preserving its useful project and verification notes in README.md and this context file."
+    "Reviewed and deleted scratch/Muse - CubeGameWebXR Project Summary.md after preserving its useful project and verification notes in README.md and this context file.",
+    "Collapsed per-conversation Chat_* files into one .md/.txt pair per programming session (Chat_2026-11-03); the Session End Protocol now runs only when the user says they are done for the session.",
+    "Handoff cleanup: removed duplicate tag HandOffFromMuse, added v5 tag on 9b5dc13, removed scratch.ps1 and the stale .txt copies of context/instructions, tidied README and HUD help text, and changed Quest grip detection to per-controller squeeze events (user-verified working on Quest).",
+    "Start script now binds the server and tunnel to 127.0.0.1, shares one running-PID helper, and the Stop script's manual hint uses Stop-Process -Id; smoke-tested start/stop."
   ],
   "purpose": "A 90s-inspired cube-rolling puzzle for Meta Quest, played in the browser using WebXR.",
   "repository": {
@@ -23,8 +26,8 @@
   },
   "currentPosition": {
     "status": "Complete",
-    "focus": "Reviewed and removed the redundant Muse project summary, preserving useful details.",
-    "nextStep": "Paste this session's transcript into Conversations/Chat_2026-11-03A.txt and confirm when saved; the public-repository sensitive-information scan is pending."
+    "focus": "Handoff cleanup complete; one Chat file pair per programming session.",
+    "nextStep": "At end of session, paste the transcript into Conversations/Chat_2026-11-03.txt and confirm when saved; the public-repository sensitive-information scan is pending."
   },
   "currentSession": {
     "startupComplete": true,
@@ -44,7 +47,7 @@
     "gameGeometry": "10x10 grid on a 2.0 m board; CELL is derived as BOARD_SIZE / GRID. The cube starts at column 5, row 5, and generated levels have at least 6 coloured cells.",
     "initialCubeOrientation": "Up Blue, down Orange, north Green, south Yellow, east Red, west Purple.",
     "worldTransform": "Board, cube, icons, and status text share worldGroup, whose home position is (0, 1.0, -2.0); desktop camera is at (0, 4.2, 1.8) looking at (0, 1.0, -2.0).",
-    "verificationStatus": "Desktop behavior was tested; Quest thumbstick direction and two-grip drag still need hardware verification."
+    "verificationStatus": "Desktop behavior was tested. Quest two-grip detection (per-controller squeeze events) was verified by the user on hardware; thumbstick direction and trigger still need explicit verification."
   },
   "userPreferences": {
     "guidedTransparency": "Keep responses short and direct; report work and validation clearly.",
@@ -56,7 +59,7 @@
   ],
   "openQuestions": [],
   "nextActions": [
-    "Paste this session's transcript into Conversations/Chat_2026-11-03A.txt and confirm when saved; then perform the required public-repository sensitive-information scan."
+    "At end of session, paste the transcript into Conversations/Chat_2026-11-03.txt and confirm when saved; then perform the required public-repository sensitive-information scan."
   ],
   "conflictCheckProtocol": {
     "compareAgainst": [

@@ -263,7 +263,11 @@ function updateHUD() {
   hudDown.textContent = down.name;
   hudDown.style.color = down.css;
   hudMessage.textContent = message;
-  // In-world panel: text only, no background fill and no border.
+  drawStatusPanel(down);
+}
+
+// In-world panel: text only, no background fill and no border.
+function drawStatusPanel(down) {
   panelCtx.clearRect(0, 0, 1024, 288);
   panelCtx.fillStyle = '#ffffff';
   panelCtx.font = 'bold 52px system-ui, sans-serif';
@@ -279,7 +283,7 @@ function updateHUD() {
 }
 
 // --- Rolling ------------------------------------------------------------------
-let roll = null; // {t, axis, totalAngle, edge, startOffset, startPos, startQuat, endPos, dir}
+let roll = null; // {t, axis, totalAngle, edge, startOffset, startQuat, endPos, dir, destCol, destRow}
 
 function tryRoll(dir) {
   if (roll || win) return;
@@ -302,7 +306,7 @@ function tryRoll(dir) {
   roll = {
     t: 0, axis, totalAngle, edge,
     startOffset: startPos.clone().sub(edge),
-    startPos, startQuat: cube.quaternion.clone(),
+    startQuat: cube.quaternion.clone(),
     endPos, dir, destCol, destRow,
   };
 }
@@ -395,17 +399,24 @@ let triggerPrev = false;
 let drag = null; // {mid, angle, dist, worldPos, worldQuat, worldScale}
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpMid = new THREE.Vector3();
 
+// Grip state comes from each controller's own squeeze events, so it always
+// matches the controller object whose position the world drag reads.
+const gripHeld = [false, false];
+[controller0, controller1].forEach((controller, i) => {
+  controller.addEventListener('squeezestart', () => { gripHeld[i] = true; });
+  controller.addEventListener('squeezeend', () => { gripHeld[i] = false; });
+});
+renderer.xr.addEventListener('sessionend', () => { gripHeld.fill(false); drag = null; });
+
 function readXRInput() {
   const session = renderer.xr.getSession();
-  if (!session) return { grips: [false, false], stick: null, trigger: false };
-  const grips = [false, false];
+  if (!session) return { grips: gripHeld, stick: null, trigger: false };
   let stick = null;
   let trigger = false;
   const sources = session.inputSources || [];
-  for (let i = 0; i < sources.length; i++) {
-    const gp = sources[i].gamepad;
+  for (const source of sources) {
+    const gp = source.gamepad;
     if (!gp) continue;
-    if (gp.buttons[1] && gp.buttons[1].pressed) grips[i < 2 ? i : 0] = true;
     if (gp.buttons[0] && gp.buttons[0].pressed) trigger = true;
     if (!stick && gp.axes) {
       const ax = gp.axes.length >= 4 ? gp.axes[2] : gp.axes[0];
@@ -413,10 +424,7 @@ function readXRInput() {
       if (typeof ax === 'number' && typeof ay === 'number') stick = { x: ax, y: ay };
     }
   }
-  // Grips are indexed by controller order in practice; also accept the
-  // controller groups' squeeze state via the session sources count.
-  // The two entries above cover left + right when both are present.
-  return { grips, stick, trigger };
+  return { grips: gripHeld, stick, trigger };
 }
 
 function updateWorldDrag(input) {

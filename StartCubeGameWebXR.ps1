@@ -29,28 +29,23 @@ $stateDir = Join-Path $env:LOCALAPPDATA 'cube-game-webxr'
 $stateFile = Join-Path $stateDir 'processes.json'
 New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
 
+function Get-RunningPids($state) {
+    @($state.ServerPid, $state.TunnelPid) | Where-Object {
+        $_ -and (Get-Process -Id $_ -ErrorAction SilentlyContinue)
+    }
+}
+
 if (Test-Path $stateFile) {
     try {
         $existing = Get-Content $stateFile -Raw | ConvertFrom-Json
-        $running = @()
-
-        foreach ($processId in @($existing.ServerPid, $existing.TunnelPid)) {
-            if ($processId -and (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
-                $running += $processId
-            }
-        }
+        $running = @(Get-RunningPids $existing)
 
         if ($running.Count -gt 0) {
             Write-Host "CubeGameWebXR services already running. PIDs: $($running -join ', ')" -ForegroundColor Yellow
             Write-Host "Attempting to stop existing services by calling ./StopCubeGameWebXR.ps1 ..." -ForegroundColor Yellow
             & "$scriptRoot\StopCubeGameWebXR.ps1"
             Start-Sleep -Seconds 2
-            $stillRunning = @()
-            foreach ($processId in @($existing.ServerPid, $existing.TunnelPid)) {
-                if ($processId -and (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
-                    $stillRunning += $processId
-                }
-            }
+            $stillRunning = @(Get-RunningPids $existing)
             if ($stillRunning.Count -gt 0) {
                 Write-Host "Some services could not be stopped automatically. Please stop these PIDs manually: $($stillRunning -join ', ')" -ForegroundColor Red
                 return
@@ -73,10 +68,10 @@ if (Test-Path $cloudflaredErrorLogFile) {
     Remove-Item -Path $cloudflaredErrorLogFile -Force
 }
 
-$serverArgs = @('-m', 'http.server', $Port, '--bind', '0.0.0.0', '--directory', $appDir)
+$serverArgs = @('-m', 'http.server', $Port, '--bind', '127.0.0.1', '--directory', $appDir)
 $server = Start-Process -FilePath 'py' -ArgumentList $serverArgs -WorkingDirectory $appDir -WindowStyle Minimized -PassThru
 
-$tunnelUrl = "http://localhost:$Port"
+$tunnelUrl = "http://127.0.0.1:$Port"
 $tunnelArgs = @('tunnel', '--url', $tunnelUrl)
 $tunnel = Start-Process `
     -FilePath 'cloudflared' `

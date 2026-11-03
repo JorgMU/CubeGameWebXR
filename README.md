@@ -44,16 +44,16 @@ and Purple west.
 ### Desktop (for testing logic without a headset)
 - Arrow keys / WASD: roll.
 - Ctrl+Arrow keys: move the world (one cell, 0.2 m, per press; hold to slide). Ctrl+Up moves the board away from you, Ctrl+Down toward you, Ctrl+Left/Right sideways.
-- Mouse wheel: scale the world, same as +/- — scroll up enlarges (×1.1), scroll down shrinks (×0.9). 0 resets position, rotation, and scale.
+- Q / E: rotate the world.
+- + / - or mouse wheel: scale the world (scroll up / + enlarges ×1.1, scroll down / - shrinks ×0.9).
+- 0: reset world position, rotation, and scale.
 - N: next level. R: restart the current level (same pattern, icons restored).
-- Q / E: rotate the world. + / -: scale the world. 0: reset world position,
-  rotation, and scale.
 - The HTML buttons in the top-left do Next level / Restart level.
 
 ## Repo layout — what is served, and what is not
 
 ```
-CubeGameWebXR/                  repo root — init git here
+CubeGameWebXR/                  repo root
   README.md                     not served (repo docs)
   .gitignore                    not served
   StartCubeGameWebXR.ps1        not served (run from repo root)
@@ -64,15 +64,11 @@ CubeGameWebXR/                  repo root — init git here
 ```
 
 Only `app/index.html` and `app/main.js` need to be served. Nothing else
-in v1 is a web asset: icons are drawn on canvas in `main.js`, and
+is a web asset: icons are drawn on canvas in `main.js`, and
 Three.js r160 is loaded from a CDN via an import map in `index.html`.
 If you add assets later (textures, sounds, models), put them under
 `app/` — for example `app/Assets/` — so their relative URLs keep working
 from `index.html`.
-
-`index.html` and `main.js` needed no code change for this move, because
-`index.html` already loads `./main.js` relatively, and both files moved
-together into `app/`.
 
 ## Run it
 
@@ -94,9 +90,10 @@ Requirements: Python launcher `py` in PATH, and `cloudflared` in PATH
 (`winget install Cloudflare.cloudflared`).
 
 What Start does:
-- Serves only `app/` with `py -m http.server` on port **8001**
+- Serves only `app/` with `py -m http.server` on port **8001**, bound to
+  127.0.0.1 so it is not exposed on your LAN (the tunnel reaches it locally).
   (8001, not 8000, so it can run alongside EarthAndMoon on 8000).
-- Starts `cloudflared tunnel --url http://localhost:8001` and prints the
+- Starts `cloudflared tunnel --url http://127.0.0.1:8001` and prints the
   `https://*.trycloudflare.com` URL, which it also copies to the clipboard.
   Open that URL in the Quest Browser — WebXR needs a secure (HTTPS)
   context, and a plain `http://` address to your PC over LAN will not qualify.
@@ -105,15 +102,6 @@ What Start does:
 - If services are already running, it calls the Stop script first.
 
 Stop kills both PIDs from that state file and removes the state file.
-
-To init the repo with this version:
-
-```powershell
-cd CubeGameWebXR
-git init
-git add .
-git commit -m "Initial v1"
-```
 
 ### Option B — any static server
 
@@ -144,5 +132,5 @@ Quest, you still need an HTTPS URL (see Option A).
 - World rotation is yaw only, to keep the board horizontal.
 - Desktop world-drag by mouse is not implemented; use Q/E, +/-, and 0.
 - No sound, no timer, no score, and no hand-tracking controls yet.
-- Desktop behavior has been tested; Quest controller input and two-grip
-  world dragging still need verification on a headset.
+- Desktop behavior has been tested; Quest two-grip world dragging works,
+  but thumbstick direction and the trigger have not been explicitly verified.
