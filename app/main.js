@@ -983,7 +983,7 @@ function flushAppearance() {
 // 2D-only table of the current settings, selectable so it can be copied as defaults.
 const hudColors = document.getElementById('hudColors');
 function updateColorTable() {
-  const hex = (t) => `#${hsvToRgb(t.h, t.s, t.v).map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  const hex = (t) => hsvCss(t.h, t.s, t.v);
   const rows = ['Item           Color    Opacity Border'];
   for (const [key, t] of Object.entries(appearance)) {
     const alpha = key === 'board' || key === 'cube' ? `${Math.round(t.a * 100)}%` : '-';
