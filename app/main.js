@@ -15,7 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@22:55:00';
+const BUILD_TIMESTAMP = '2026-11-03@23:10:00';
 const GRID = 11;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -493,6 +493,7 @@ function resetCubeAndWin(isRestart) {
   cube.position.set(p.x, CUBE / 2, p.z);
   cube.quaternion.identity();
   win = false;
+  stopCelebration();
   levelStartedAt = null;
   levelEndedAt = null;
   displayedElapsedSeconds = 0;
@@ -665,6 +666,72 @@ function playSwoop() {
   osc.stop(t + 0.28);
 }
 
+// --- Level-win celebration: particle burst plus a bouncing status panel ---
+const CONFETTI_COUNT = 150;
+const CELEBRATE_SECONDS = 2.2;
+const confettiPositions = new Float32Array(CONFETTI_COUNT * 3);
+const confettiColors = new Float32Array(CONFETTI_COUNT * 3);
+const confettiVelocities = new Float32Array(CONFETTI_COUNT * 3);
+const confettiGeometry = new THREE.BufferGeometry();
+confettiGeometry.setAttribute('position', new THREE.BufferAttribute(confettiPositions, 3));
+confettiGeometry.setAttribute('color', new THREE.BufferAttribute(confettiColors, 3));
+const confettiSprite = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+const confetti = new THREE.Points(confettiGeometry, new THREE.PointsMaterial({
+  size: 0.05, map: confettiSprite, vertexColors: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+}));
+confetti.frustumCulled = false;
+confetti.visible = false;
+worldGroup.add(confetti);
+let celebrateT = null;
+
+function startCelebration() {
+  const tint = new THREE.Color();
+  for (let i = 0; i < CONFETTI_COUNT; i++) {
+    const o = i * 3;
+    confettiPositions[o] = (Math.random() - 0.5) * BOARD_SIZE;
+    confettiPositions[o + 1] = 0.02;
+    confettiPositions[o + 2] = (Math.random() - 0.5) * BOARD_SIZE;
+    confettiVelocities[o] = (Math.random() - 0.5) * 0.15;
+    confettiVelocities[o + 1] = 0.25 + Math.random() * 0.45;
+    confettiVelocities[o + 2] = (Math.random() - 0.5) * 0.15;
+    tint.setHex(COLORS[i % COLORS.length].hex);
+    confettiColors[o] = tint.r; confettiColors[o + 1] = tint.g; confettiColors[o + 2] = tint.b;
+  }
+  confettiGeometry.attributes.position.needsUpdate = true;
+  confettiGeometry.attributes.color.needsUpdate = true;
+  confetti.material.opacity = 1;
+  confetti.visible = true;
+  celebrateT = 0;
+}
+
+function stopCelebration() {
+  celebrateT = null;
+  confetti.visible = false;
+  panel.scale.setScalar(1);
+}
+
+function updateCelebration(dt) {
+  if (celebrateT === null) return;
+  celebrateT += dt;
+  if (celebrateT >= CELEBRATE_SECONDS) { stopCelebration(); return; }
+  const k = celebrateT / CELEBRATE_SECONDS;
+  for (let i = 0; i < CONFETTI_COUNT * 3; i++) confettiPositions[i] += confettiVelocities[i] * dt;
+  confettiGeometry.attributes.position.needsUpdate = true;
+  confetti.material.opacity = 1 - k * k;
+  panel.scale.setScalar(1 + 0.12 * Math.sin(k * Math.PI * 4) * (1 - k));
+}
+
 function finishRoll() {
   cubeCol = roll.destCol; cubeRow = roll.destRow;
   cube.position.copy(roll.endPos);
@@ -693,6 +760,7 @@ function finishRoll() {
         completedAt: new Date().toLocaleDateString(),
       });
       updateSessionRecords();
+      startCelebration();
       message = `Level complete! ${renderer.xr.isPresenting ? 'Pull a trigger' : 'Press N'} for the next level.`;
     } else {
       message = `Matched ${COLORS[orientation.down].name}! ${remaining} left.`;
@@ -1433,6 +1501,7 @@ generateLevel();
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
+  updateCelebration(dt);
   if (levelStartedAt !== null && !win) {
     const elapsed = elapsedLevelSeconds();
     if (elapsed !== displayedElapsedSeconds) {
