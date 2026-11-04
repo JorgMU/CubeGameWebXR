@@ -15,7 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@21:32:05';
+const BUILD_TIMESTAMP = '2026-11-03@22:12:00';
 const GRID = 11;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -211,9 +211,7 @@ const SHAPE_BORDER_COLOR = '#f9ff2c';
 const shapeStyles = {};
 for (const col of COLORS) shapeStyles[col.shape] = { fill: col.css, border: SHAPE_BORDER_COLOR, width: SHAPE_BORDER_WIDTH };
 
-function makeIconTexture(shape, background = null) {
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 256;
+function drawIcon(c, shape, background = null) {
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, 256, 256);
   if (background) { ctx.fillStyle = background; ctx.fillRect(0, 0, 256, 256); }
@@ -247,16 +245,27 @@ function makeIconTexture(shape, background = null) {
     ctx.closePath();
   }
   ctx.fill(); ctx.stroke();
+}
+function makeIconTexture(shape, background = null) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  drawIcon(c, shape, background);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+// Redraws an existing icon texture in place, so dragging a slider re-uploads
+// pixels instead of allocating and disposing GPU textures.
+function redrawIconTexture(tex, shape, background = null) {
+  drawIcon(tex.image, shape, background);
+  tex.needsUpdate = true;
 }
 const iconTextures = COLORS.map((col) => makeIconTexture(col.shape));
 
 // --- Cube -------------------------------------------------------------------
 // Deep-blue faces carrying the same coloured symbol as the board icons.
 const CUBE_FACE_BLUE = '#0b1d65';
-const CUBE_OPACITY = 0.63;
+const CUBE_OPACITY = 0.6;
 const cubeFaceMaterial = (colorIndex) => new THREE.MeshStandardMaterial({
   map: makeIconTexture(COLORS[colorIndex].shape, CUBE_FACE_BLUE),
   transparent: true,
@@ -967,9 +976,11 @@ let appearancePart = 0;
 let appearancePrev = false;
 let appearanceTriggerPrev = false;
 let appearanceDrag = null; // 'picker' | 'bright' | 'opacity' while the trigger is held
-let cubeDirty = false;
+let cubeColorDirty = false;
 let cubeRebuildAt = 0;
 const dirtyShapes = new Set();
+const dirtyCubeShapes = new Set();
+const APPEARANCE_REBUILD_MS = 250; // texture redraws while a slider is held
 
 const apKey = () => AP_ITEMS[appearanceItem].id + AP_ITEMS[appearanceItem].parts[appearancePart].id;
 const BORDER_WIDTH_MAX = 30; // px on the 256 px icon texture
@@ -1004,31 +1015,29 @@ function applyShapeStyles() {
 function rebuildShapeTextures() {
   for (const shape of dirtyShapes) {
     const i = COLORS.findIndex((col) => col.shape === shape);
-    const old = iconTextures[i];
-    iconTextures[i] = makeIconTexture(shape);
-    for (const entry of icons.values()) {
-      if (entry.colorIndex === i) { entry.mesh.material.map = iconTextures[i]; entry.mesh.material.needsUpdate = true; }
-    }
-    old.dispose();
+    redrawIconTexture(iconTextures[i], shape);
+    dirtyCubeShapes.add(shape);
   }
   dirtyShapes.clear();
 }
+function applyCubeOpacity() {
+  const a = appearance.cube.a;
+  cubeMaterials.forEach((mat) => { mat.opacity = a; });
+}
 function rebuildCubeFaces() {
-  const c = appearance.cube;
-  const bg = hsvCss(c.h, c.s, c.v);
+  const bg = hsvCss(appearance.cube.h, appearance.cube.s, appearance.cube.v);
   cubeMaterials.forEach((mat, i) => {
-    const old = mat.map;
-    mat.map = makeIconTexture(COLORS[cubeFaceColorIndices[i]].shape, bg);
-    mat.opacity = c.a;
-    mat.needsUpdate = true;
-    if (old) old.dispose();
+    const shape = COLORS[cubeFaceColorIndices[i]].shape;
+    if (cubeColorDirty || dirtyCubeShapes.has(shape)) redrawIconTexture(mat.map, shape, bg);
   });
-  cubeDirty = false;
+  applyCubeOpacity();
+  cubeColorDirty = false;
+  dirtyCubeShapes.clear();
   cubeRebuildAt = performance.now();
 }
 function flushAppearance() {
-  if (dirtyShapes.size) { rebuildShapeTextures(); cubeDirty = true; }
-  if (cubeDirty) rebuildCubeFaces();
+  if (dirtyShapes.size) rebuildShapeTextures();
+  if (cubeColorDirty || dirtyCubeShapes.size) rebuildCubeFaces();
 }
 // 2D-only table of the current settings, selectable so it can be copied as defaults.
 const hudColors = document.getElementById('hudColors');
@@ -1050,6 +1059,7 @@ applyShapeStyles();
 applyBoardAppearance();
 applyLineColors();
 for (const col of COLORS) dirtyShapes.add(col.shape);
+cubeColorDirty = true;
 flushAppearance();
 updateColorTable();
 
@@ -1197,7 +1207,10 @@ function applyAppearanceDrag(px, py) {
   }
   if (!changed) return;
   if (key === 'board') applyBoardAppearance();
-  else if (key === 'cube') cubeDirty = true;
+  else if (key === 'cube') {
+    applyCubeOpacity(); // opacity is a material value, so it updates live without touching textures
+    if (appearanceDrag !== 'opacity') cubeColorDirty = true;
+  }
   else if (key === 'grid' || key === 'edges') applyLineColors();
   else {
     applyShapeStyles();
@@ -1256,12 +1269,13 @@ function updateAppearance(triggerHeld, rightStick) {
   }
   if (!triggerHeld && appearanceDrag) {
     appearanceDrag = null;
+    flushAppearance();
     saveAppearance();
     drawAppearance(true);
   }
   if (appearanceDrag && hit) applyAppearanceDrag(hit.x, hit.y);
   appearanceTriggerPrev = triggerHeld;
-  if ((cubeDirty || dirtyShapes.size) && performance.now() - cubeRebuildAt > 100) flushAppearance();
+  if ((cubeColorDirty || dirtyCubeShapes.size || dirtyShapes.size) && performance.now() - cubeRebuildAt > APPEARANCE_REBUILD_MS) flushAppearance();
 }
 
 function readXRInput() {
