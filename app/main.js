@@ -269,6 +269,7 @@ const cubeFaceMaterial = (colorIndex) => new THREE.MeshStandardMaterial({
   transparent: true,
   opacity: CUBE_OPACITY,
   depthWrite: true,
+  depthTest: false,
   side: THREE.DoubleSide, // inner faces show through the translucent cube
 });
 // BoxGeometry material order: +x east, -x west, +y up, -y down, +z south, -z north.
