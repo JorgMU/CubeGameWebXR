@@ -166,7 +166,7 @@ worldGroup.add(panel);
 // Shows where the viewer is and how the board is posed. Both are in the same
 // scene (tracking-space) coordinates, so the numbers can be compared directly.
 // Toggle with the P key; refreshed a few times a second, not every frame.
-let debugVisible = true;
+let debugVisible = false;
 let debugTimer = 0;
 const debugCanvas = document.createElement('canvas');
 debugCanvas.width = 1024; debugCanvas.height = 350;
@@ -245,8 +245,9 @@ function debugLines() {
   const boardX = dbgAxis.set(1, 0, 0).applyQuaternion(worldGroup.quaternion);
   const yawDeg = Math.atan2(-boardX.z, boardX.x) * RAD2DEG;
   const pose = `Board   yaw ${yawDeg.toFixed(0)}°  tilt ${tiltDeg}° (0 flat, 90 facing you)`;
-  const buttons = `Left buttons down: ${leftButtonsDown || '-'}`;
-  return [`Build   ${BUILD_TIMESTAMP}`, `Sky     ${SKY_MODES[skyMode]}`, player, board, pose, buttons];
+  const leftButtons = `Left buttons down: ${leftButtonsDown || '-'}`;
+  const rightButtons = `Right buttons down: ${rightButtonsDown || '-'}`;
+  return [`Build   ${BUILD_TIMESTAMP}`, `Sky     ${SKY_MODES[skyMode]}`, player, board, pose, leftButtons, rightButtons];
 }
 
 function updateDebug() {
@@ -726,6 +727,7 @@ let exitTimer = null;
 const EXIT_MR_DELAY_MS = 3000;
 const EXIT_MR_MESSAGE = 'Exiting MR in 3 seconds. Look forward; your view will be reset.';
 let leftButtonsDown = '';
+let rightButtonsDown = '';
 let leftController = null, rightController = null;
 
 const exitMessageCanvas = document.createElement('canvas');
@@ -1231,6 +1233,7 @@ function readXRInput() {
   let appearanceButton = false;
   let leftTrigger = false;
   const leftDown = [];
+  const rightDown = [];
   const sources = session.inputSources || [];
   for (const source of sources) {
     const gp = source.gamepad;
@@ -1244,6 +1247,9 @@ function readXRInput() {
       gp.buttons.forEach((b, i) => { if (b.pressed) leftDown.push(i); });
       if (MENU_TOGGLE_BUTTONS.some((i) => gp.buttons[i] && gp.buttons[i].pressed)) menuButton = true;
     }
+    if (source.handedness === 'right') {
+      gp.buttons.forEach((b, i) => { if (b.pressed) rightDown.push(i); });
+    }
     if (gp.axes) {
       const ax = gp.axes.length >= 4 ? gp.axes[2] : gp.axes[0];
       const ay = gp.axes.length >= 4 ? gp.axes[3] : gp.axes[1];
@@ -1256,6 +1262,7 @@ function readXRInput() {
     }
   }
   leftButtonsDown = leftDown.join(',');
+  rightButtonsDown = rightDown.join(',');
   return { grips: gripHeld, stick, rightStick, trigger, menuButton, appearanceButton, leftTrigger };
 }
 
