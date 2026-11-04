@@ -16,6 +16,10 @@
   #hudDebug { margin-top: 8px; font: 11px Consolas, monospace; color: #9a9a9a; white-space: pre; }
   #hudColors { margin-top: 8px; font: 11px Consolas, monospace; color: #9a9a9a; white-space: pre; user-select: text; }
   #hudBuildTimestamp { font: 11px Consolas, monospace; color: #9a9a9a; }
+  #records { margin-top: 6px; font-size: 12px; }
+  #records table { border-collapse: collapse; width: 100%; text-align: left; }
+  #records th, #records td { padding: 2px 4px; }
+  #records th { color: #ffd166; }
   #hud button {
     margin: 6px 6px 0 0; padding: 6px 10px; border-radius: 6px; border: 0;
     background: #3498db; color: #fff; cursor: pointer; font-size: 14px;
@@ -35,11 +39,19 @@
 <body>
 <div id="hud">
   <div>Level: <b id="hudLevel">1</b> &nbsp; Remaining: <b id="hudRemaining">–</b></div>
+  <div>Time: <b id="hudTime">Ready</b> &nbsp; Score: <b id="hudScore">0</b></div>
   <div>Face down: <b id="hudDown">–</b></div>
   <div id="hudMessage">Roll the cube onto a matching flat icon.</div>
   <div id="hudBuildTimestamp"></div>
   <button id="btnNext">Next level (N)</button>
   <button id="btnRestart">Restart level (R)</button>
+  <details id="records">
+    <summary>Session scores (top 10)</summary>
+    <table>
+      <thead><tr><th>Level</th><th>Score</th><th>Time</th><th>Completed</th></tr></thead>
+      <tbody id="hudRecords"><tr><td colspan="4">Complete a level to add a record.</td></tr></tbody>
+    </table>
+  </details>
   <div id="hudDebug"></div>
   <div id="hudColors"></div>
   <div id="help">
@@ -47,6 +59,7 @@
     twist hands to rotate (yaw), move hands apart/together to scale.<br />
     Desktop: arrow keys / WASD roll, Ctrl+Arrow move world, Q/E rotate world,
     +/-/wheel scale world, 0 reset world, N next, R restart.<br />
+    The clock starts on your first move. Each match is worth 180 points minus one point per elapsed second (minimum 0). The top 10 completed levels are kept for this page session.<br />
     In MR after a win, pull a trigger to start the next level.
   </div>
 </div>

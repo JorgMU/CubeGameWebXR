@@ -15,7 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@18:44:55';
+const BUILD_TIMESTAMP = '2026-11-03@20:47:05';
 const GRID = 10;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -277,12 +277,9 @@ cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(cube.geometry), cubeEdge
 cube.renderOrder = 1; // after the board and icons so they show through it
 worldGroup.add(cube);
 
-// --- In-world status text (flat in the board plane, off the near edge) ---
-// Same plane as the board and icons (rotation.x = -PI/2), sitting just
-// past the south edge, toward the player. No background, no border —
-// just text, so it reads as text on the board plane rather than a sign.
-// With rotation.x = -PI/2 the top of the canvas points north (-z), so the
-// text reads upright when viewed from the player (south) side.
+// --- In-world status text (tilted up beyond the far edge) ---
+// Past the north edge, tilted 30 degrees up from the board plane and facing
+// the player on the south side. No background or border.
 const panelCanvas = document.createElement('canvas');
 panelCanvas.width = 1024; panelCanvas.height = 288;
 const panelCtx = panelCanvas.getContext('2d');
@@ -292,8 +289,8 @@ const panel = new THREE.Mesh(
   new THREE.PlaneGeometry(1.8, 0.5),
   new THREE.MeshBasicMaterial({ map: panelTexture, transparent: true, side: THREE.DoubleSide })
 );
-panel.rotation.x = -Math.PI / 2;
-panel.position.set(0, 0.012, BOARD_SIZE / 2 + 0.35);
+panel.rotation.x = -Math.PI / 3;
+panel.position.set(0, 0.1, -BOARD_SIZE / 2 - 0.35);
 worldGroup.add(panel);
 
 // --- Debug readout (small grey text) -------------------------------------------
@@ -314,8 +311,8 @@ const debugPanel = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ map: debugTexture, transparent: true, side: THREE.DoubleSide })
 );
 debugPanel.rotation.x = -Math.PI / 2;
-// Directly beyond the status panel, which spans z = BOARD_SIZE/2 + 0.10 .. + 0.60.
-debugPanel.position.set(0, 0.012, BOARD_SIZE / 2 + 0.6 + debugPanelHeight / 2);
+// Just beyond the south edge of the board, with a small gap.
+debugPanel.position.set(0, 0.012, BOARD_SIZE / 2 + debugPanelHeight / 2 + 0.05);
 worldGroup.add(debugPanel);
 const hudDebug = document.getElementById('hudDebug');
 
@@ -369,11 +366,35 @@ let icons = new Map();   // "col,row" -> {colorIndex, mesh}
 let remaining = 0;
 let win = false;
 let message = 'Roll the cube onto a matching flat icon.';
+const MESSAGE_SECONDS = 3;
+let lastMessageSeen = null;
+let messageShownAt = 0;
+let levelStartedAt = null;
+let levelEndedAt = null;
+let displayedElapsedSeconds = 0;
+let levelScore = 0;
+const sessionRecords = [];
+
+function elapsedLevelSeconds(now = performance.now()) {
+  if (levelStartedAt === null) return 0;
+  return Math.floor(((levelEndedAt ?? now) - levelStartedAt) / 1000);
+}
+
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+}
 
 function keyOf(col, row) { return `${col},${row}`; }
 
+function removeIcon(entry) {
+  worldGroup.remove(entry.mesh);
+  entry.mesh.geometry.dispose();
+  entry.mesh.material.dispose();
+}
+
 function clearIcons() {
-  for (const entry of icons.values()) worldGroup.remove(entry.mesh);
+  for (const entry of icons.values()) removeIcon(entry);
   icons.clear();
 }
 
@@ -417,12 +438,17 @@ function generateLevel() {
 }
 
 function resetCubeAndWin(isRestart) {
+  roll = null;
   cubeCol = START_COL; cubeRow = START_ROW;
   orientation = { ...INITIAL_ORIENTATION };
   const p = cellToLocal(cubeCol, cubeRow);
   cube.position.set(p.x, CUBE / 2, p.z);
   cube.quaternion.identity();
   win = false;
+  levelStartedAt = null;
+  levelEndedAt = null;
+  displayedElapsedSeconds = 0;
+  levelScore = 0;
   if (isRestart) message = `Level ${level} restarted.`;
 }
 
@@ -441,12 +467,17 @@ function nextLevel() {
 const hudLevel = document.getElementById('hudLevel');
 const hudRemaining = document.getElementById('hudRemaining');
 const hudDown = document.getElementById('hudDown');
+const hudTime = document.getElementById('hudTime');
+const hudScore = document.getElementById('hudScore');
 const hudMessage = document.getElementById('hudMessage');
 const hudBuildTimestamp = document.getElementById('hudBuildTimestamp');
+const hudRecords = document.getElementById('hudRecords');
 
 function updateHUD() {
   hudLevel.textContent = String(level);
   hudRemaining.textContent = String(remaining);
+  hudTime.textContent = levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds());
+  hudScore.textContent = String(levelScore);
   hudBuildTimestamp.textContent = `Build: ${BUILD_TIMESTAMP}`;
   const down = COLORS[orientation.down];
   hudDown.textContent = down.name;
@@ -459,16 +490,28 @@ function updateHUD() {
 function drawStatusPanel(down) {
   panelCtx.clearRect(0, 0, 1024, 288);
   panelCtx.fillStyle = '#ffffff';
-  panelCtx.font = 'bold 52px system-ui, sans-serif';
+  panelCtx.font = 'bold 46px system-ui, sans-serif';
   panelCtx.textAlign = 'center';
-  panelCtx.fillText(`Level ${level}   Remaining: ${remaining}`, 512, 80);
+  panelCtx.fillText(`Level ${level}   Remaining: ${remaining}`, 512, 58);
+  panelCtx.fillText(`Time: ${levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds())}   Score: ${levelScore}`, 512, 124);
   panelCtx.fillStyle = down.css;
-  panelCtx.font = 'bold 52px system-ui, sans-serif';
-  panelCtx.fillText(`Face down: ${down.name}`, 512, 160);
+  panelCtx.font = 'bold 42px system-ui, sans-serif';
+  panelCtx.fillText(`Face down: ${down.name}`, 512, 184);
   panelCtx.fillStyle = '#ffffff';
-  panelCtx.font = '36px system-ui, sans-serif';
-  panelCtx.fillText(message.length > 52 ? message.slice(0, 52) + '…' : message, 512, 232);
+  panelCtx.font = '32px system-ui, sans-serif';
+  panelCtx.fillText(message.length > 58 ? message.slice(0, 58) + '…' : message, 512, 248);
   panelTexture.needsUpdate = true;
+}
+
+function updateSessionRecords() {
+  sessionRecords.sort((a, b) => b.score - a.score || a.elapsedSeconds - b.elapsedSeconds);
+  sessionRecords.length = Math.min(sessionRecords.length, 10);
+  hudRecords.replaceChildren();
+  for (const record of sessionRecords) {
+    const row = hudRecords.insertRow();
+    [record.level, record.score, formatTime(record.elapsedSeconds), record.completedAt]
+      .forEach((value) => { row.insertCell().textContent = String(value); });
+  }
 }
 
 // --- Rolling ------------------------------------------------------------------
@@ -487,6 +530,11 @@ function tryRoll(dir) {
     message = 'Edge — can\'t roll that way.';
     updateHUD();
     return;
+  }
+  if (levelStartedAt === null) {
+    levelStartedAt = performance.now();
+    displayedElapsedSeconds = 0;
+    updateHUD();
   }
   const startPos = cube.position.clone();
   const endLocal = cellToLocal(destCol, destRow);
@@ -519,11 +567,21 @@ function finishRoll() {
   applyOrientationAfterRoll(dir);
   const entry = icons.get(keyOf(cubeCol, cubeRow));
   if (entry && entry.colorIndex === orientation.down) {
-    worldGroup.remove(entry.mesh);
+    const matchAt = performance.now();
+    removeIcon(entry);
     icons.delete(keyOf(cubeCol, cubeRow));
     remaining -= 1;
+    levelScore += Math.max(0, 180 - elapsedLevelSeconds(matchAt));
     if (remaining <= 0) {
       win = true;
+      levelEndedAt = matchAt;
+      sessionRecords.push({
+        level,
+        score: levelScore,
+        elapsedSeconds: elapsedLevelSeconds(levelEndedAt),
+        completedAt: new Date().toLocaleDateString(),
+      });
+      updateSessionRecords();
       message = 'Level complete! Press N, or a trigger in MR, for the next level.';
     } else {
       message = `Matched ${COLORS[orientation.down].name}! ${remaining} left.`;
@@ -596,7 +654,7 @@ for (const i of [0, 1]) {
 
 let stickReady = true;
 let stickTimer = 0;
-const STICK_REPEAT_SECONDS = 0.25; // one square per half second while the stick is held
+const STICK_REPEAT_SECONDS = 0.125; // one square per eighth of a second while the stick is held
 let triggerPrev = false;
 let drag = null; // {mode: 0 | 1 | 'both', mid, angle, dist, worldPos, worldQuat, worldScale}
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpMid = new THREE.Vector3();
@@ -953,6 +1011,9 @@ updateColorTable();
 const appearanceCanvas = document.createElement('canvas');
 appearanceCanvas.width = AP_W; appearanceCanvas.height = AP_H;
 const apCtx = appearanceCanvas.getContext('2d');
+const appearanceBaseCanvas = document.createElement('canvas');
+appearanceBaseCanvas.width = AP_W; appearanceBaseCanvas.height = AP_H;
+const appearanceBaseCtx = appearanceBaseCanvas.getContext('2d');
 const appearanceTexture = new THREE.CanvasTexture(appearanceCanvas);
 appearanceTexture.colorSpace = THREE.SRGBColorSpace;
 const appearanceMesh = new THREE.Mesh(
@@ -980,44 +1041,61 @@ function drawSlider(rect, label, fraction, trackFill) {
   apCtx.fillRect(rect.x + fraction * rect.w - 6, rect.y - 6, 12, rect.h + 12);
 }
 
-function drawAppearance() {
+let appearanceBaseItem = -1;
+let appearanceBasePart = -1;
+let appearanceLastDraw = 0;
+const AP_DRAW_INTERVAL = 1000 / 30;
+
+function drawAppearanceBase() {
   const item = AP_ITEMS[appearanceItem];
-  const t = appearance[apKey()];
-  apCtx.clearRect(0, 0, AP_W, AP_H);
-  apCtx.fillStyle = 'rgba(20,20,30,0.94)';
-  apCtx.fillRect(0, 0, AP_W, AP_H);
-  apCtx.strokeStyle = '#9a9a9a';
-  apCtx.lineWidth = 4;
-  apCtx.strokeRect(2, 2, AP_W - 4, AP_H - 4);
-  apCtx.textAlign = 'center';
-  apCtx.textBaseline = 'middle';
-  apCtx.font = 'bold 44px system-ui, sans-serif';
+  appearanceBaseCtx.clearRect(0, 0, AP_W, AP_H);
+  appearanceBaseCtx.fillStyle = 'rgba(20,20,30,0.94)';
+  appearanceBaseCtx.fillRect(0, 0, AP_W, AP_H);
+  appearanceBaseCtx.strokeStyle = '#9a9a9a';
+  appearanceBaseCtx.lineWidth = 4;
+  appearanceBaseCtx.strokeRect(2, 2, AP_W - 4, AP_H - 4);
+  appearanceBaseCtx.textAlign = 'center';
+  appearanceBaseCtx.textBaseline = 'middle';
+  appearanceBaseCtx.font = 'bold 44px system-ui, sans-serif';
   [['<', 10], ['>', 422]].forEach(([arrow, x]) => {
-    apCtx.fillStyle = 'rgba(60,60,80,0.9)';
-    apCtx.fillRect(x, AP_SELECT.y, 80, AP_SELECT.h);
-    apCtx.fillStyle = '#ffffff';
-    apCtx.fillText(arrow, x + 40, AP_SELECT.y + 40);
+    appearanceBaseCtx.fillStyle = 'rgba(60,60,80,0.9)';
+    appearanceBaseCtx.fillRect(x, AP_SELECT.y, 80, AP_SELECT.h);
+    appearanceBaseCtx.fillStyle = '#ffffff';
+    appearanceBaseCtx.fillText(arrow, x + 40, AP_SELECT.y + 40);
   });
-  apCtx.fillText(item.label, AP_W / 2, AP_SELECT.y + 40);
+  appearanceBaseCtx.fillText(item.label, AP_W / 2, AP_SELECT.y + 40);
   const partW = (AP_W - 20) / item.parts.length;
   item.parts.forEach((part, i) => {
     const x = 10 + i * partW;
-    apCtx.fillStyle = i === appearancePart ? '#3498db' : 'rgba(60,60,80,0.9)';
-    apCtx.fillRect(x + 2, AP_PARTS.y, partW - 4, AP_PARTS.h);
-    apCtx.fillStyle = '#ffffff';
-    apCtx.font = 'bold 36px system-ui, sans-serif';
-    apCtx.fillText(part.label, x + partW / 2, AP_PARTS.y + 36);
+    appearanceBaseCtx.fillStyle = i === appearancePart ? '#3498db' : 'rgba(60,60,80,0.9)';
+    appearanceBaseCtx.fillRect(x + 2, AP_PARTS.y, partW - 4, AP_PARTS.h);
+    appearanceBaseCtx.fillStyle = '#ffffff';
+    appearanceBaseCtx.font = 'bold 36px system-ui, sans-serif';
+    appearanceBaseCtx.fillText(part.label, x + partW / 2, AP_PARTS.y + 36);
   });
   const p = AP_PICKER;
-  const hue = apCtx.createLinearGradient(p.x, 0, p.x + p.w, 0);
+  const hue = appearanceBaseCtx.createLinearGradient(p.x, 0, p.x + p.w, 0);
   for (let i = 0; i <= 6; i++) hue.addColorStop(i / 6, `hsl(${i * 60}, 100%, 50%)`);
-  apCtx.fillStyle = hue;
-  apCtx.fillRect(p.x, p.y, p.w, p.h);
-  const sat = apCtx.createLinearGradient(0, p.y, 0, p.y + p.h);
+  appearanceBaseCtx.fillStyle = hue;
+  appearanceBaseCtx.fillRect(p.x, p.y, p.w, p.h);
+  const sat = appearanceBaseCtx.createLinearGradient(0, p.y, 0, p.y + p.h);
   sat.addColorStop(0, 'rgba(255,255,255,0)');
   sat.addColorStop(1, 'rgba(255,255,255,1)');
-  apCtx.fillStyle = sat;
-  apCtx.fillRect(p.x, p.y, p.w, p.h);
+  appearanceBaseCtx.fillStyle = sat;
+  appearanceBaseCtx.fillRect(p.x, p.y, p.w, p.h);
+  appearanceBaseItem = appearanceItem;
+  appearanceBasePart = appearancePart;
+}
+
+function drawAppearance(force = false) {
+  const now = performance.now();
+  if (!force && now - appearanceLastDraw < AP_DRAW_INTERVAL) return;
+  if (appearanceBaseItem !== appearanceItem || appearanceBasePart !== appearancePart) drawAppearanceBase();
+  const item = AP_ITEMS[appearanceItem];
+  const t = appearance[apKey()];
+  const p = AP_PICKER;
+  apCtx.clearRect(0, 0, AP_W, AP_H);
+  apCtx.drawImage(appearanceBaseCanvas, 0, 0);
   apCtx.strokeStyle = '#ffffff';
   apCtx.lineWidth = 4;
   apCtx.beginPath();
@@ -1033,6 +1111,7 @@ function drawAppearance() {
   if (item.alpha) drawSlider(AP_OPACITY, `Opacity ${Math.round(t.a * 100)}%`, t.a, hsvCss(t.h, t.s, t.v));
   if (isBorderKey(apKey())) drawSlider(AP_OPACITY, `Border width ${Math.round(t.w)}`, t.w / BORDER_WIDTH_MAX, '#404050');
   appearanceTexture.needsUpdate = true;
+  appearanceLastDraw = now;
 }
 
 function setAppearanceOpen(open) {
@@ -1041,7 +1120,7 @@ function setAppearanceOpen(open) {
   appearanceMesh.visible = appearanceOpen;
   appearanceLine.visible = appearanceOpen;
   appearanceDrag = null;
-  if (appearanceOpen) drawAppearance();
+  if (appearanceOpen) drawAppearance(true);
   else flushAppearance();
 }
 
@@ -1049,15 +1128,29 @@ const apClamp01 = (v) => Math.min(1, Math.max(0, v));
 function applyAppearanceDrag(px, py) {
   const key = apKey();
   const t = appearance[key];
+  let changed = false;
   if (appearanceDrag === 'picker') {
-    t.h = apClamp01((px - AP_PICKER.x) / AP_PICKER.w) * 360;
-    t.s = 1 - apClamp01((py - AP_PICKER.y) / AP_PICKER.h);
+    const h = apClamp01((px - AP_PICKER.x) / AP_PICKER.w) * 360;
+    const s = 1 - apClamp01((py - AP_PICKER.y) / AP_PICKER.h);
+    changed = h !== t.h || s !== t.s;
+    t.h = h;
+    t.s = s;
   } else if (appearanceDrag === 'bright') {
-    t.v = apClamp01((px - AP_BRIGHT.x) / AP_BRIGHT.w);
+    const v = apClamp01((px - AP_BRIGHT.x) / AP_BRIGHT.w);
+    changed = v !== t.v;
+    t.v = v;
   } else if (appearanceDrag === 'opacity') {
-    if (isBorderKey(key)) t.w = apClamp01((px - AP_OPACITY.x) / AP_OPACITY.w) * BORDER_WIDTH_MAX;
-    else t.a = apClamp01((px - AP_OPACITY.x) / AP_OPACITY.w);
+    if (isBorderKey(key)) {
+      const w = apClamp01((px - AP_OPACITY.x) / AP_OPACITY.w) * BORDER_WIDTH_MAX;
+      changed = w !== t.w;
+      t.w = w;
+    } else {
+      const a = apClamp01((px - AP_OPACITY.x) / AP_OPACITY.w);
+      changed = a !== t.a;
+      t.a = a;
+    }
   }
+  if (!changed) return;
   if (key === 'board') applyBoardAppearance();
   else if (key === 'cube') cubeDirty = true;
   else if (key === 'grid' || key === 'edges') applyLineColors();
@@ -1081,7 +1174,7 @@ function stepAppearanceSelection(dir) {
     appearanceItem = (appearanceItem - 1 + AP_ITEMS.length) % AP_ITEMS.length;
     appearancePart = AP_ITEMS[appearanceItem].parts.length - 1;
   }
-  drawAppearance();
+  drawAppearance(true);
 }
 let appearanceStickReady = true;
 
@@ -1108,10 +1201,10 @@ function updateAppearance(triggerHeld, rightStick) {
       flushAppearance();
       appearanceItem = (appearanceItem + step + AP_ITEMS.length) % AP_ITEMS.length;
       appearancePart = 0;
-      drawAppearance();
+      drawAppearance(true);
     } else if (hit.y >= AP_PARTS.y && hit.y <= AP_PARTS.y + AP_PARTS.h) {
       const part = Math.min(item.parts.length - 1, Math.max(0, Math.floor((hit.x - 10) / ((AP_W - 20) / item.parts.length))));
-      if (part !== appearancePart) { flushAppearance(); appearancePart = part; drawAppearance(); }
+      if (part !== appearancePart) { flushAppearance(); appearancePart = part; drawAppearance(true); }
     } else if (inRect(AP_PICKER, 0)) appearanceDrag = 'picker';
     else if (inRect(AP_BRIGHT, 14)) appearanceDrag = 'bright';
     else if ((item.alpha || isBorderKey(apKey())) && inRect(AP_OPACITY, 14)) appearanceDrag = 'opacity';
@@ -1119,6 +1212,7 @@ function updateAppearance(triggerHeld, rightStick) {
   if (!triggerHeld && appearanceDrag) {
     appearanceDrag = null;
     saveAppearance();
+    drawAppearance(true);
   }
   if (appearanceDrag && hit) applyAppearanceDrag(hit.x, hit.y);
   appearanceTriggerPrev = triggerHeld;
@@ -1210,6 +1304,24 @@ generateLevel();
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
+  if (levelStartedAt !== null && !win) {
+    const elapsed = elapsedLevelSeconds();
+    if (elapsed !== displayedElapsedSeconds) {
+      displayedElapsedSeconds = elapsed;
+      updateHUD();
+    }
+  }
+
+  // Messages set anywhere are timed here and cleared after a few seconds,
+  // except while the level-complete prompt or the exit countdown is showing.
+  if (message !== lastMessageSeen) {
+    lastMessageSeen = message;
+    messageShownAt = performance.now();
+  } else if (message && !win && !exitPending && performance.now() - messageShownAt > MESSAGE_SECONDS * 1000) {
+    message = '';
+    lastMessageSeen = message;
+    updateHUD();
+  }
 
   debugTimer += dt;
   if (debugTimer >= DEBUG_SECONDS) { debugTimer = 0; updateDebug(); updateColorTable(); }
