@@ -15,7 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@21:17:08';
+const BUILD_TIMESTAMP = '2026-11-03@21:32:05';
 const GRID = 11;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -314,6 +314,45 @@ debugPanel.rotation.x = -Math.PI / 2;
 // Just beyond the south edge of the board, with a small gap.
 debugPanel.position.set(0, 0.012, BOARD_SIZE / 2 + debugPanelHeight / 2 + 0.05);
 worldGroup.add(debugPanel);
+
+// --- Session scores (flat in the board plane, left of the board) ---------------
+// 640 px per metre, so the 52 px text matches the 46 px text on the main panel
+// (1024 px across 1.8 m) in physical size.
+const SCORES_W = 0.9, SCORES_H = 1.3;
+const SCORES_FONT = 52;
+const scoresCanvas = document.createElement('canvas');
+scoresCanvas.width = 576; scoresCanvas.height = 832;
+const scoresCtx = scoresCanvas.getContext('2d');
+const scoresTexture = new THREE.CanvasTexture(scoresCanvas);
+scoresTexture.colorSpace = THREE.SRGBColorSpace;
+const scoresPanel = new THREE.Mesh(
+  new THREE.PlaneGeometry(SCORES_W, SCORES_H),
+  new THREE.MeshBasicMaterial({ map: scoresTexture, transparent: true, side: THREE.DoubleSide })
+);
+scoresPanel.rotation.x = -Math.PI / 2;
+// Top edge level with the board's far edge, with a small gap on the left.
+scoresPanel.position.set(-BOARD_SIZE / 2 - SCORES_W / 2 - 0.05, 0.012, -BOARD_SIZE / 2 + SCORES_H / 2);
+worldGroup.add(scoresPanel);
+
+function drawScoresPanel(records) {
+  const ctx = scoresCtx;
+  const columns = [20, 190, 380];
+  ctx.clearRect(0, 0, scoresCanvas.width, scoresCanvas.height);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${SCORES_FONT}px system-ui, sans-serif`;
+  ctx.fillText('Session scores', 20, 64);
+  ctx.fillStyle = '#ffd166';
+  ['Level', 'Score', 'Time'].forEach((label, i) => ctx.fillText(label, columns[i], 134));
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `${SCORES_FONT}px system-ui, sans-serif`;
+  if (!records.length) ctx.fillText('No scores yet.', 20, 204);
+  records.forEach((record, row) => {
+    [record.level, record.score, formatTime(record.elapsedSeconds)]
+      .forEach((value, i) => ctx.fillText(String(value), columns[i], 204 + row * 64));
+  });
+  scoresTexture.needsUpdate = true;
+}
 const hudDebug = document.getElementById('hudDebug');
 
 const dbgPos = new THREE.Vector3();
@@ -512,7 +551,9 @@ function updateSessionRecords() {
     [record.level, record.score, formatTime(record.elapsedSeconds), record.completedAt]
       .forEach((value) => { row.insertCell().textContent = String(value); });
   }
+  drawScoresPanel(sessionRecords);
 }
+drawScoresPanel(sessionRecords);
 
 // --- Rolling ------------------------------------------------------------------
 let roll = null; // {t, axis, totalAngle, edge, startOffset, startQuat, endPos, dir, destCol, destRow}
