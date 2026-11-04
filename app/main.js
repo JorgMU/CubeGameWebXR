@@ -15,8 +15,8 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@21:04:14';
-const GRID = 10;
+const BUILD_TIMESTAMP = '2026-11-03@21:17:08';
+const GRID = 11;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
 // instead of growing the board. Change BOARD_SIZE, not CELL, if you want
@@ -25,7 +25,7 @@ const BOARD_SIZE = 2.0; // m, board footprint — unchanged from the 5x5 version
 const CELL = BOARD_SIZE / GRID; // 0.2 m for a 10x10 board
 const CUBE = CELL; // cube fills a cell, so rolling over its edge lands centred
 const COLORED_FRACTION = 0.5;
-const ROLL_SECONDS = 0.28;
+const ROLL_SECONDS = 0.1;
 // For an even grid there is no single centre cell, so start on the
 // south-east of the central four (col/row 5, one half-cell off true centre).
 const START_COL = Math.floor(GRID / 2);
@@ -654,7 +654,7 @@ for (const i of [0, 1]) {
 
 let stickReady = true;
 let stickTimer = 0;
-const STICK_REPEAT_SECONDS = 0.05; // one square per twentieth of a second while the stick is held
+const STICK_REPEAT_SECONDS = 0.125; // one square per twentieth of a second while the stick is held
 let triggerPrev = false;
 let drag = null; // {mode: 0 | 1 | 'both', mid, angle, dist, worldPos, worldQuat, worldScale}
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpMid = new THREE.Vector3();
@@ -675,7 +675,10 @@ function resetWorldForMR() {
   tiltDeg = home.tilt;
   worldGroup.scale.setScalar(home.scale);
 }
-renderer.xr.addEventListener('sessionstart', resetWorldForMR);
+renderer.xr.addEventListener('sessionstart', () => {
+  resetWorldForMR();
+  restartLevel(); // entering or leaving MR restarts the current board
+});
 renderer.xr.addEventListener('sessionend', () => {
   if (exitTimer !== null) window.clearTimeout(exitTimer);
   exitTimer = null;
@@ -683,6 +686,7 @@ renderer.xr.addEventListener('sessionend', () => {
   exitMessageMesh.visible = false;
   if (skyMode === 3) { skyMode = 0; loadSky(); } // passthrough only exists inside the session
   setMenuOpen(false);
+  restartLevel();
 });
 
 // --- Controller menu --------------------------------------------------------
