@@ -15,7 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@18:16:43';
+const BUILD_TIMESTAMP = '2026-11-03@18:44:55';
 const GRID = 10;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -33,9 +33,9 @@ const START_ROW = Math.floor(GRID / 2);
 
 // Colour order is also the cube-face index order.
 const COLORS = [
-  { name: 'Red',    hex: 0xe74c3c, css: '#e74c3c', shape: 'circle' },
-  { name: 'Green',  hex: 0x2ecc71, css: '#2ecc71', shape: 'triangle' },
-  { name: 'Blue',   hex: 0x3498db, css: '#3498db', shape: 'square' },
+  { name: 'Red',    hex: 0xc10303, css: '#c10303', shape: 'circle' },
+  { name: 'Green',  hex: 0x049f27, css: '#049f27', shape: 'triangle' },
+  { name: 'Blue',   hex: 0x354cff, css: '#354cff', shape: 'square' },
   { name: 'Yellow', hex: 0xf1c40f, css: '#f1c40f', shape: 'star' },
   { name: 'Purple', hex: 0x9b59b6, css: '#9b59b6', shape: 'diamond' },
   { name: 'Orange', hex: 0xe67e22, css: '#e67e22', shape: 'hexagon' },
@@ -188,25 +188,28 @@ function toggleSky() {
 loadSky();
 
 // Transparent board: faint plane + grid lines.
-const BOARD_OPACITY = 0.25; // black board surface, darkens the sky/passthrough behind it
+const BOARD_COLOR = '#0d8407';
+const BOARD_OPACITY = 0.34; // tinted board surface, darkens the sky/passthrough behind it
 const boardPlane = new THREE.Mesh(
   new THREE.PlaneGeometry(BOARD_SIZE, BOARD_SIZE),
-  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: BOARD_OPACITY, depthWrite: false, side: THREE.DoubleSide })
+  new THREE.MeshBasicMaterial({ color: BOARD_COLOR, transparent: true, opacity: BOARD_OPACITY, depthWrite: false, side: THREE.DoubleSide })
 );
 boardPlane.renderOrder = -0.5; // after the sky, before the icons, so it darkens only what is behind the board
 boardPlane.rotation.x = -Math.PI / 2;
 boardPlane.position.y = 0.001;
 worldGroup.add(boardPlane);
 
-const GRID_COLOR = 0x6680b3; // single colour so the panel can recolour every line
+const GRID_COLOR = 0xfff005; // single colour so the panel can recolour every line
 const grid = new THREE.GridHelper(BOARD_SIZE, GRID, GRID_COLOR, GRID_COLOR);
 grid.position.y = 0.005;
 worldGroup.add(grid);
 
 // --- Flat icons (lie flat in the plane of the board) ------------------------
 // Fill and border colour per shape; the appearance panel edits these.
+const SHAPE_BORDER_WIDTH = 4; // px on the 256 px icon texture
+const SHAPE_BORDER_COLOR = '#f9ff2c';
 const shapeStyles = {};
-for (const col of COLORS) shapeStyles[col.shape] = { fill: col.css, border: '#ffffff' };
+for (const col of COLORS) shapeStyles[col.shape] = { fill: col.css, border: SHAPE_BORDER_COLOR, width: SHAPE_BORDER_WIDTH };
 
 function makeIconTexture(shape, background = null) {
   const c = document.createElement('canvas');
@@ -216,7 +219,7 @@ function makeIconTexture(shape, background = null) {
   if (background) { ctx.fillStyle = background; ctx.fillRect(0, 0, 256, 256); }
   ctx.fillStyle = shapeStyles[shape].fill;
   ctx.strokeStyle = shapeStyles[shape].border;
-  ctx.lineWidth = 10;
+  ctx.lineWidth = Math.max(shapeStyles[shape].width, 0.01);
   ctx.beginPath();
   const cx = 128, cy = 128, r = 84;
   if (shape === 'circle') {
@@ -252,8 +255,8 @@ const iconTextures = COLORS.map((col) => makeIconTexture(col.shape));
 
 // --- Cube -------------------------------------------------------------------
 // Deep-blue faces carrying the same coloured symbol as the board icons.
-const CUBE_FACE_BLUE = '#0a1a5c';
-const CUBE_OPACITY = 0.5;
+const CUBE_FACE_BLUE = '#0b1d65';
+const CUBE_OPACITY = 0.63;
 const cubeFaceMaterial = (colorIndex) => new THREE.MeshStandardMaterial({
   map: makeIconTexture(COLORS[colorIndex].shape, CUBE_FACE_BLUE),
   transparent: true,
@@ -268,7 +271,8 @@ const cubeFaceColorIndices = [
 ];
 const cubeMaterials = cubeFaceColorIndices.map(cubeFaceMaterial);
 const cube = new THREE.Mesh(new THREE.BoxGeometry(CUBE, CUBE, CUBE), cubeMaterials);
-const cubeEdgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+const CUBE_EDGE_COLOR = '#767f0f';
+const cubeEdgeMaterial = new THREE.LineBasicMaterial({ color: CUBE_EDGE_COLOR });
 cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(cube.geometry), cubeEdgeMaterial));
 cube.renderOrder = 1; // after the board and icons so they show through it
 worldGroup.add(cube);
@@ -592,7 +596,7 @@ for (const i of [0, 1]) {
 
 let stickReady = true;
 let stickTimer = 0;
-const STICK_REPEAT_SECONDS = 0.5; // one square per half second while the stick is held
+const STICK_REPEAT_SECONDS = 0.25; // one square per half second while the stick is held
 let triggerPrev = false;
 let drag = null; // {mode: 0 | 1 | 'both', mid, angle, dist, worldPos, worldQuat, worldScale}
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpMid = new THREE.Vector3();
@@ -814,10 +818,11 @@ const AP_ITEMS = [
   { id: 'cube', label: 'Cube faces', parts: [{ id: '', label: 'Face colour' }], alpha: true },
   { id: 'grid', label: 'Grid lines', parts: [{ id: '', label: 'Lines' }] },
   { id: 'edges', label: 'Cube edges', parts: [{ id: '', label: 'Edges' }] },
+  { id: 'shapeBorder', label: 'Shape borders', parts: [{ id: '', label: 'All shapes' }] },
   ...COLORS.map((col) => ({
     id: col.shape,
     label: titleCase(col.shape),
-    parts: [{ id: '.fill', label: 'Fill' }, { id: '.border', label: 'Border' }],
+    parts: [{ id: '.fill', label: 'Fill' }],
   })),
 ];
 
@@ -835,15 +840,15 @@ function cssToHsv(css) {
 }
 
 const appearance = {
-  board: { h: 0, s: 0, v: 0, a: BOARD_OPACITY },
+  board: { ...cssToHsv(BOARD_COLOR), a: BOARD_OPACITY },
   cube: { ...cssToHsv(CUBE_FACE_BLUE), a: CUBE_OPACITY },
   grid: { ...cssToHsv(`#${GRID_COLOR.toString(16).padStart(6, '0')}`), a: 1 },
-  edges: { h: 0, s: 0, v: 0, a: 1 },
+  edges: { ...cssToHsv(CUBE_EDGE_COLOR), a: 1 },
 };
 for (const col of COLORS) {
   appearance[`${col.shape}.fill`] = { ...cssToHsv(col.css), a: 1 };
-  appearance[`${col.shape}.border`] = { h: 0, s: 0, v: 1, a: 1 };
 }
+appearance.shapeBorder = { ...cssToHsv(SHAPE_BORDER_COLOR), a: 1, w: SHAPE_BORDER_WIDTH }; // shared by every shape
 try {
   const saved = JSON.parse(localStorage.getItem(AP_STORAGE_KEY));
   for (const key of Object.keys(appearance)) {
@@ -851,6 +856,7 @@ try {
       Object.assign(appearance[key], saved[key]);
     }
   }
+  if (!Number.isFinite(appearance.shapeBorder.w)) appearance.shapeBorder.w = SHAPE_BORDER_WIDTH;
 } catch { /* ignore bad or unavailable storage */ }
 let appearanceOpen = false;
 let appearanceItem = 0;
@@ -863,6 +869,8 @@ let cubeRebuildAt = 0;
 const dirtyShapes = new Set();
 
 const apKey = () => AP_ITEMS[appearanceItem].id + AP_ITEMS[appearanceItem].parts[appearancePart].id;
+const BORDER_WIDTH_MAX = 30; // px on the 256 px icon texture
+const isBorderKey = (key) => key === 'shapeBorder';
 
 function hsvToRgb(h, s, v) {
   const f = (n) => {
@@ -880,15 +888,14 @@ function applyBoardAppearance() {
 }
 function applyLineColors() {
   const g = appearance.grid, e = appearance.edges;
-  grid.material.vertexColors = false; // one colour for every line
-  grid.material.needsUpdate = true;
   grid.material.color.set(hsvCss(g.h, g.s, g.v));
   cubeEdgeMaterial.color.set(hsvCss(e.h, e.s, e.v));
 }
 function applyShapeStyles() {
+  const b = appearance.shapeBorder;
   for (const col of COLORS) {
-    const f = appearance[`${col.shape}.fill`], b = appearance[`${col.shape}.border`];
-    shapeStyles[col.shape] = { fill: hsvCss(f.h, f.s, f.v), border: hsvCss(b.h, b.s, b.v) };
+    const f = appearance[`${col.shape}.fill`];
+    shapeStyles[col.shape] = { fill: hsvCss(f.h, f.s, f.v), border: hsvCss(b.h, b.s, b.v), width: b.w };
   }
 }
 function rebuildShapeTextures() {
@@ -920,6 +927,19 @@ function flushAppearance() {
   if (dirtyShapes.size) { rebuildShapeTextures(); cubeDirty = true; }
   if (cubeDirty) rebuildCubeFaces();
 }
+// 2D-only table of the current settings, selectable so it can be copied as defaults.
+const hudColors = document.getElementById('hudColors');
+function updateColorTable() {
+  const hex = (t) => `#${hsvToRgb(t.h, t.s, t.v).map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  const rows = ['Item           Color    Opacity Border'];
+  for (const [key, t] of Object.entries(appearance)) {
+    const alpha = key === 'board' || key === 'cube' ? `${Math.round(t.a * 100)}%` : '-';
+    const width = isBorderKey(key) ? `${Math.round(t.w)}px` : '-';
+    rows.push(`${key.padEnd(14)} ${hex(t)} ${alpha.padEnd(7)} ${width}`);
+  }
+  hudColors.textContent = rows.join('\n');
+  hudColors.style.display = debugVisible ? 'block' : 'none';
+}
 function saveAppearance() {
   try { localStorage.setItem(AP_STORAGE_KEY, JSON.stringify(appearance)); } catch { /* ignore */ }
 }
@@ -928,6 +948,7 @@ applyBoardAppearance();
 applyLineColors();
 for (const col of COLORS) dirtyShapes.add(col.shape);
 flushAppearance();
+updateColorTable();
 
 const appearanceCanvas = document.createElement('canvas');
 appearanceCanvas.width = AP_W; appearanceCanvas.height = AP_H;
@@ -1010,6 +1031,7 @@ function drawAppearance() {
   bright.addColorStop(1, hsvCss(t.h, t.s, 1));
   drawSlider(AP_BRIGHT, `Brightness ${Math.round(t.v * 100)}%`, t.v, bright);
   if (item.alpha) drawSlider(AP_OPACITY, `Opacity ${Math.round(t.a * 100)}%`, t.a, hsvCss(t.h, t.s, t.v));
+  if (isBorderKey(apKey())) drawSlider(AP_OPACITY, `Border width ${Math.round(t.w)}`, t.w / BORDER_WIDTH_MAX, '#404050');
   appearanceTexture.needsUpdate = true;
 }
 
@@ -1033,19 +1055,43 @@ function applyAppearanceDrag(px, py) {
   } else if (appearanceDrag === 'bright') {
     t.v = apClamp01((px - AP_BRIGHT.x) / AP_BRIGHT.w);
   } else if (appearanceDrag === 'opacity') {
-    t.a = apClamp01((px - AP_OPACITY.x) / AP_OPACITY.w);
+    if (isBorderKey(key)) t.w = apClamp01((px - AP_OPACITY.x) / AP_OPACITY.w) * BORDER_WIDTH_MAX;
+    else t.a = apClamp01((px - AP_OPACITY.x) / AP_OPACITY.w);
   }
   if (key === 'board') applyBoardAppearance();
   else if (key === 'cube') cubeDirty = true;
   else if (key === 'grid' || key === 'edges') applyLineColors();
   else {
     applyShapeStyles();
-    dirtyShapes.add(key.split('.')[0]);
+    if (isBorderKey(key)) for (const col of COLORS) dirtyShapes.add(col.shape);
+    else dirtyShapes.add(key.split('.')[0]);
   }
   drawAppearance();
 }
 
-function updateAppearance(triggerHeld) {
+// Right stick left/right walks every (item, part) in order, wrapping around.
+function stepAppearanceSelection(dir) {
+  flushAppearance();
+  const item = AP_ITEMS[appearanceItem];
+  appearancePart += dir;
+  if (appearancePart >= item.parts.length) {
+    appearanceItem = (appearanceItem + 1) % AP_ITEMS.length;
+    appearancePart = 0;
+  } else if (appearancePart < 0) {
+    appearanceItem = (appearanceItem - 1 + AP_ITEMS.length) % AP_ITEMS.length;
+    appearancePart = AP_ITEMS[appearanceItem].parts.length - 1;
+  }
+  drawAppearance();
+}
+let appearanceStickReady = true;
+
+function updateAppearance(triggerHeld, rightStick) {
+  const sx = rightStick ? rightStick.x : 0;
+  if (Math.abs(sx) < 0.3) appearanceStickReady = true;
+  else if (Math.abs(sx) > 0.6 && appearanceStickReady) {
+    appearanceStickReady = false;
+    stepAppearanceSelection(sx > 0 ? 1 : -1);
+  }
   let hit = null;
   scene.updateMatrixWorld();
   leftController.getWorldPosition(menuRaycaster.ray.origin);
@@ -1068,7 +1114,7 @@ function updateAppearance(triggerHeld) {
       if (part !== appearancePart) { flushAppearance(); appearancePart = part; drawAppearance(); }
     } else if (inRect(AP_PICKER, 0)) appearanceDrag = 'picker';
     else if (inRect(AP_BRIGHT, 14)) appearanceDrag = 'bright';
-    else if (item.alpha && inRect(AP_OPACITY, 14)) appearanceDrag = 'opacity';
+    else if ((item.alpha || isBorderKey(apKey())) && inRect(AP_OPACITY, 14)) appearanceDrag = 'opacity';
   }
   if (!triggerHeld && appearanceDrag) {
     appearanceDrag = null;
@@ -1081,8 +1127,9 @@ function updateAppearance(triggerHeld) {
 
 function readXRInput() {
   const session = renderer.xr.getSession();
-  if (!session) return { grips: gripHeld, stick: null, trigger: false, menuButton: false, appearanceButton: false, leftTrigger: false };
+  if (!session) return { grips: gripHeld, stick: null, rightStick: null, trigger: false, menuButton: false, appearanceButton: false, leftTrigger: false };
   let stick = null;
+  let rightStick = null;
   let trigger = false;
   let menuButton = false;
   let appearanceButton = false;
@@ -1104,6 +1151,7 @@ function readXRInput() {
     if (gp.axes) {
       const ax = gp.axes.length >= 4 ? gp.axes[2] : gp.axes[0];
       const ay = gp.axes.length >= 4 ? gp.axes[3] : gp.axes[1];
+      if (source.handedness === 'right' && typeof ax === 'number' && typeof ay === 'number') rightStick = { x: ax, y: ay };
       // Either thumbstick can roll the cube; use whichever is pushed further.
       if (typeof ax === 'number' && typeof ay === 'number'
           && (!stick || Math.hypot(ax, ay) > Math.hypot(stick.x, stick.y))) {
@@ -1112,7 +1160,7 @@ function readXRInput() {
     }
   }
   leftButtonsDown = leftDown.join(',');
-  return { grips: gripHeld, stick, trigger, menuButton, appearanceButton, leftTrigger };
+  return { grips: gripHeld, stick, rightStick, trigger, menuButton, appearanceButton, leftTrigger };
 }
 
 function updateWorldDrag(input) {
@@ -1164,7 +1212,7 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
 
   debugTimer += dt;
-  if (debugTimer >= DEBUG_SECONDS) { debugTimer = 0; updateDebug(); }
+  if (debugTimer >= DEBUG_SECONDS) { debugTimer = 0; updateDebug(); updateColorTable(); }
   if (roll) {
     roll.t += dt;
     const pRaw = Math.min(roll.t / ROLL_SECONDS, 1);
@@ -1197,7 +1245,7 @@ renderer.setAnimationLoop(() => {
   if (menuOpen) updateMenuHover();
   if (input.appearanceButton && !appearancePrev) setAppearanceOpen(!appearanceOpen);
   appearancePrev = input.appearanceButton;
-  if (appearanceOpen) updateAppearance(input.leftTrigger);
+  if (appearanceOpen) updateAppearance(input.leftTrigger, input.rightStick);
   const uiOpen = menuOpen || appearanceOpen;
 
   // Grip held: the stick's forward/back axis tilts the board instead of rolling.

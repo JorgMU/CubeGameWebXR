@@ -4,12 +4,12 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 
 ## The game
 
-- A horizontal 10×10 board floats in front of you. It is a 25% opaque black
-  surface (`BOARD_OPACITY`) with grid lines, so it darkens the background behind it. The board footprint is still 2 m, so each cell is
+- A horizontal 10×10 board floats in front of you. It is a 34% opaque green
+  surface (`BOARD_COLOR`, `BOARD_OPACITY`) with yellow grid lines, so it tints the background behind it. The board footprint is still 2 m, so each cell is
   0.2 m — to change the board size, change `BOARD_SIZE` in `main.js`,
   not `CELL`, and the cells, cube, and icons will scale with it.
-- A cube has deep-blue faces at 50% opacity (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
-  shape and colour as the board icons):
+- A cube has deep-blue faces at 63% opacity (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
+  shape and colour as the board icons). Default colours were captured from the appearance panel's colour table.
   Red, Green, Blue, Yellow, Purple, Orange.
 - Each coloured square shows a **flat icon lying in the plane of the board**
   (not floating above it). The icon's shape is also distinct per colour,
@@ -62,11 +62,15 @@ and Purple west.
   (On the Quest browser the left menu button is reported as button index 12
   and Y as 5; the debug readout's "Left buttons down" line shows the indices.)
 - **Right B button**: opens/closes the appearance panel on the right controller. Point the left controller at
-  it and hold the left trigger to drag. The `<` / `>` buttons cycle through items (Board, Cube faces, Grid
-  lines, Cube edges, and each shape: Circle, Triangle, Square, Star, Diamond, Hexagon). Shapes have Fill and
-  Border tabs. The colour picker (hue across, saturation down) and Brightness slider update live; Opacity
-  appears for the board and cube faces. Grid lines are now one colour. Values are saved in `localStorage`.
-  The stick and trigger are captured while it is open.
+  it and hold the left trigger to drag. The `<` / `>` buttons, or the **right thumbstick left/right**, step
+  through the items in order (Board, Cube faces, Grid lines, Cube edges, Shape borders, then each shape's
+  Fill: Circle, Triangle, Square, Star, Diamond, Hexagon); the stick wraps around and also walks between an
+  item's parts when it has more than one. "Shape borders" is a single colour and width shared by every
+  shape. The colour picker (hue across, saturation down) and Brightness slider update live; Opacity
+  appears for the board and cube faces; Shape borders gets a Border width slider (0-30 px on the icon
+  texture). Grid lines stay 1 px (WebGL limit). Values are saved in `localStorage`.
+  The stick and trigger are captured while it is open. The 2D HUD shows a selectable table of every current
+  colour (hex) and the board/cube opacity, hidden with the debug readout, so you can copy values as defaults.
 
 ### Desktop (for testing logic without a headset)
 - Arrow keys / WASD: roll.
