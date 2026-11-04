@@ -1,7 +1,5 @@
 // Configuration constants for Cube Game WebXR
 
-export const BUILD_TIMESTAMP = '2026-11-04@13:32:12';
-
 // Board and grid
 export const GRID = 11;
 export const BOARD_SIZE = 2.0; // m, board footprint
@@ -66,7 +64,7 @@ export const DEBUG_SECONDS = 0.2;
 
 // Appearance panel dimensions
 export const AP_W = 512;
-export const AP_H = 256;
+export const AP_H = 610;
 export const AP_SELECT = { y: 10, h: 80 };
 export const AP_PARTS = { y: 100, h: 70 };
 export const AP_PICKER = { x: 10, y: 190, w: 492, h: 200 };
