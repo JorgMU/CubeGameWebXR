@@ -41,6 +41,7 @@ export function initScene() {
   worldGroup = new THREE.Group();
   const desktopHome = HOMES.desktop;
   worldGroup.position.set(desktopHome.position.x, desktopHome.position.y, desktopHome.position.z);
+  worldGroup.scale.setScalar(desktopHome.scale);
   scene.add(worldGroup);
 
   return { renderer, scene, camera, worldGroup };

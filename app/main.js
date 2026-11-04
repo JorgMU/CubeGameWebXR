@@ -16,7 +16,7 @@ import { gameState, resetCubePosition, setLevel, setMessage, setWin, getRoll, se
 
 // Import scene and rendering modules
 import { initScene, getRenderer, getScene, getCamera, getWorldGroup, onWindowResize, setAnimationLoop, xrGetSession, xrIsPresenting } from './scene.js';
-import { initShapeStyles, shapeStyles, drawIcon, makeIconTexture, redrawIconTexture, createIconTextures } from './textures.js';
+import { initShapeStyles, shapeStyles, drawIcon, makeIconTexture, redrawIconTexture, createIconTextures, createCubeIconTextures } from './textures.js';
 import { createBoardMaterial, createGridMaterial, createIconMaterial, createSkyMaterial, createPanelMaterial, createDebugMaterial } from './materials.js';
 import { initCube, getCube, getCubeMaterials, getCubeFaceColorIndices, setCubePosition, resetCubeTransform, getCubePosition, getCubeQuaternion, setCubeQuaternion, applyRollAnimation, setCubeMaterialOpacity } from './cube.js';
 
@@ -40,6 +40,9 @@ const renderer = getRenderer();
 const scene = getScene();
 const camera = getCamera();
 const worldGroup = getWorldGroup();
+
+// Ensure desktop scale is set correctly at startup
+worldGroup.scale.setScalar(HOMES.desktop.scale);
 
 function currentHome() {
   return xrGetSession() ? HOMES.mr : HOMES.desktop;
@@ -140,9 +143,10 @@ worldGroup.add(grid);
 // Initialize shape styles and icon textures
 initShapeStyles();
 const iconTextures = createIconTextures();
+const cubeIconTextures = createCubeIconTextures();
 
 // Initialize cube
-initCube(iconTextures);
+initCube(cubeIconTextures);
 const cube = getCube();
 const cubeEdgeMaterial = new THREE.LineBasicMaterial({ color: CUBE_EDGE_COLOR });
 cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(cube.geometry), cubeEdgeMaterial));

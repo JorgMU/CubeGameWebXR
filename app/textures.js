@@ -64,3 +64,7 @@ export function redrawIconTexture(tex, shape, background = null) {
 export function createIconTextures() {
   return COLORS.map((col) => makeIconTexture(col.shape));
 }
+
+export function createCubeIconTextures() {
+  return COLORS.map((col) => makeIconTexture(col.shape));
+}

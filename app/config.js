@@ -1,4 +1,5 @@
 // Configuration constants for Cube Game WebXR
+// Updated: scale 2 for desktop
 
 // Board and grid
 export const GRID = 11;
@@ -27,18 +28,18 @@ export const COLORS = [
 export const INITIAL_ORIENTATION = { up: 2, down: 5, north: 1, south: 3, east: 0, west: 4 };
 
 // Board appearance
-export const BOARD_COLOR = '#0d8407';
+export const BOARD_COLOR = '#000584';
 export const BOARD_OPACITY = 0.34;
-export const GRID_COLOR = 0xfff005;
-export const CUBE_FACE_BLUE = '#0b1d65';
+export const GRID_COLOR = 0x01003b;
+export const CUBE_FACE_BLUE = '#036500';
 export const CUBE_OPACITY = 0.6;
-export const CUBE_EDGE_COLOR = '#767f0f';
-export const SHAPE_BORDER_COLOR = '#f9ff2c';
+export const CUBE_EDGE_COLOR = '#055200';
+export const SHAPE_BORDER_COLOR = '#000000';
 export const SHAPE_BORDER_WIDTH = 4; // px on the 256 px icon texture
 
 // World positioning
 export const HOMES = {
-  desktop: { position: { x: 0, y: 0.5, z: -2.0 }, tilt: 0, scale: 1 },
+  desktop: { position: { x: 0, y: 0.5, z: -2.0 }, tilt: 0, scale: 2 },
   mr: { position: { x: 0, y: -0.1, z: -1.75 }, tilt: 30, scale: 0.75 },
 };
 
