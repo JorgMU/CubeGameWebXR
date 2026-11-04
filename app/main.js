@@ -268,7 +268,7 @@ const cubeFaceMaterial = (colorIndex) => new THREE.MeshStandardMaterial({
   map: makeIconTexture(COLORS[colorIndex].shape, CUBE_FACE_BLUE),
   transparent: true,
   opacity: CUBE_OPACITY,
-  depthWrite: false,
+  depthWrite: true,
   side: THREE.DoubleSide, // inner faces show through the translucent cube
 });
 // BoxGeometry material order: +x east, -x west, +y up, -y down, +z south, -z north.
@@ -452,7 +452,7 @@ function buildIconsFromPattern() {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.rotation.x = -Math.PI / 2;
     const p = cellToLocal(cell.col, cell.row);
-    mesh.position.set(p.x, 0.012, p.z);
+    mesh.position.set(p.x, 0.002, p.z);
     worldGroup.add(mesh);
     icons.set(keyOf(cell.col, cell.row), { colorIndex: cell.colorIndex, mesh });
   }
@@ -488,7 +488,7 @@ function resetCubeAndWin(isRestart) {
   cubeCol = START_COL; cubeRow = START_ROW;
   orientation = { ...INITIAL_ORIENTATION };
   const p = cellToLocal(cubeCol, cubeRow);
-  cube.position.set(p.x, CUBE / 2, p.z);
+  cube.position.set(p.x, CUBE / 2 + 0.004, p.z);
   cube.quaternion.identity();
   win = false;
   stopCelebration();
@@ -587,7 +587,7 @@ function tryRoll(dir) {
   }
   const startPos = cube.position.clone();
   const endLocal = cellToLocal(destCol, destRow);
-  const endPos = new THREE.Vector3(endLocal.x, CUBE / 2, endLocal.z);
+  const endPos = new THREE.Vector3(endLocal.x, CUBE / 2 + 0.004, endLocal.z);
   const edge = new THREE.Vector3((startPos.x + endPos.x) / 2, 0, (startPos.z + endPos.z) / 2);
   roll = {
     t: 0, axis, totalAngle, edge,
