@@ -15,7 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@17:54:10';
+const BUILD_TIMESTAMP = '2026-11-03@18:16:43';
 const GRID = 10;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -188,26 +188,34 @@ function toggleSky() {
 loadSky();
 
 // Transparent board: faint plane + grid lines.
+const BOARD_OPACITY = 0.25; // black board surface, darkens the sky/passthrough behind it
 const boardPlane = new THREE.Mesh(
   new THREE.PlaneGeometry(BOARD_SIZE, BOARD_SIZE),
-  new THREE.MeshBasicMaterial({ color: 0x88aaff, transparent: true, opacity: 0.06, side: THREE.DoubleSide })
+  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: BOARD_OPACITY, depthWrite: false, side: THREE.DoubleSide })
 );
+boardPlane.renderOrder = -0.5; // after the sky, before the icons, so it darkens only what is behind the board
 boardPlane.rotation.x = -Math.PI / 2;
 boardPlane.position.y = 0.001;
 worldGroup.add(boardPlane);
 
-const grid = new THREE.GridHelper(BOARD_SIZE, GRID, 0x88aaff, 0x445577);
+const GRID_COLOR = 0x6680b3; // single colour so the panel can recolour every line
+const grid = new THREE.GridHelper(BOARD_SIZE, GRID, GRID_COLOR, GRID_COLOR);
 grid.position.y = 0.005;
 worldGroup.add(grid);
 
 // --- Flat icons (lie flat in the plane of the board) ------------------------
-function makeIconTexture(color, shape) {
+// Fill and border colour per shape; the appearance panel edits these.
+const shapeStyles = {};
+for (const col of COLORS) shapeStyles[col.shape] = { fill: col.css, border: '#ffffff' };
+
+function makeIconTexture(shape, background = null) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 256;
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, 256, 256);
-  ctx.fillStyle = color.css;
-  ctx.strokeStyle = '#ffffff';
+  if (background) { ctx.fillStyle = background; ctx.fillRect(0, 0, 256, 256); }
+  ctx.fillStyle = shapeStyles[shape].fill;
+  ctx.strokeStyle = shapeStyles[shape].border;
   ctx.lineWidth = 10;
   ctx.beginPath();
   const cx = 128, cy = 128, r = 84;
@@ -240,22 +248,29 @@ function makeIconTexture(color, shape) {
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
-const iconTextures = COLORS.map((col) => makeIconTexture(col, col.shape));
+const iconTextures = COLORS.map((col) => makeIconTexture(col.shape));
 
 // --- Cube -------------------------------------------------------------------
-const cubeMaterials = [
-  new THREE.MeshStandardMaterial({ color: COLORS[INITIAL_ORIENTATION.east].hex }),  // +x east
-  new THREE.MeshStandardMaterial({ color: COLORS[INITIAL_ORIENTATION.west].hex }),  // -x west
-  new THREE.MeshStandardMaterial({ color: COLORS[INITIAL_ORIENTATION.up].hex }),    // +y up
-  new THREE.MeshStandardMaterial({ color: COLORS[INITIAL_ORIENTATION.down].hex }),  // -y down
-  new THREE.MeshStandardMaterial({ color: COLORS[INITIAL_ORIENTATION.south].hex }), // +z south
-  new THREE.MeshStandardMaterial({ color: COLORS[INITIAL_ORIENTATION.north].hex }), // -z north
+// Deep-blue faces carrying the same coloured symbol as the board icons.
+const CUBE_FACE_BLUE = '#0a1a5c';
+const CUBE_OPACITY = 0.5;
+const cubeFaceMaterial = (colorIndex) => new THREE.MeshStandardMaterial({
+  map: makeIconTexture(COLORS[colorIndex].shape, CUBE_FACE_BLUE),
+  transparent: true,
+  opacity: CUBE_OPACITY,
+  depthWrite: false,
+  side: THREE.DoubleSide, // inner faces show through the translucent cube
+});
+// BoxGeometry material order: +x east, -x west, +y up, -y down, +z south, -z north.
+const cubeFaceColorIndices = [
+  INITIAL_ORIENTATION.east, INITIAL_ORIENTATION.west, INITIAL_ORIENTATION.up,
+  INITIAL_ORIENTATION.down, INITIAL_ORIENTATION.south, INITIAL_ORIENTATION.north,
 ];
+const cubeMaterials = cubeFaceColorIndices.map(cubeFaceMaterial);
 const cube = new THREE.Mesh(new THREE.BoxGeometry(CUBE, CUBE, CUBE), cubeMaterials);
-cube.add(new THREE.LineSegments(
-  new THREE.EdgesGeometry(cube.geometry),
-  new THREE.LineBasicMaterial({ color: 0x000000 })
-));
+const cubeEdgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(cube.geometry), cubeEdgeMaterial));
+cube.renderOrder = 1; // after the board and icons so they show through it
 worldGroup.add(cube);
 
 // --- In-world status text (flat in the board plane, off the near edge) ---
@@ -682,8 +697,8 @@ const pointerLine = new THREE.Line(
 pointerLine.visible = false;
 
 function attachMenu() {
-  if (leftController) leftController.add(menuMesh);
-  if (rightController) rightController.add(pointerLine);
+  if (leftController) { leftController.add(menuMesh); leftController.add(appearanceLine); }
+  if (rightController) { rightController.add(pointerLine); rightController.add(appearanceMesh); }
 }
 
 function drawMenu() {
@@ -706,6 +721,7 @@ function drawMenu() {
 }
 
 function setMenuOpen(open) {
+  if (open && appearanceOpen) setAppearanceOpen(false);
   menuOpen = open && !!leftController;
   menuMesh.visible = menuOpen;
   pointerLine.visible = menuOpen && !!rightController;
@@ -775,19 +791,313 @@ function activateMenuItem() {
 controller0.addEventListener('selectstart', () => { if (controller0 === rightController) activateMenuItem(); });
 controller1.addEventListener('selectstart', () => { if (controller1 === rightController) activateMenuItem(); });
 
+// --- Appearance panel -------------------------------------------------------
+// Opened with the RIGHT controller's B button; the panel rides on the right
+// controller and is operated by pointing the LEFT controller and holding its
+// trigger. A generic item list (board, cube, grid, cube edges, each shape's
+// fill and border) is edited with a colour picker (hue/saturation), a
+// brightness slider and, where it applies, an opacity slider. Values persist
+// in localStorage.
+const APPEARANCE_BUTTON = 5; // B on the right Touch controller
+const AP_W = 512, AP_H = 610;
+const AP_SELECT = { y: 10, h: 80 };
+const AP_PARTS = { y: 100, h: 70 };
+const AP_PICKER = { x: 10, y: 190, w: 492, h: 200 };
+const AP_BRIGHT = { x: 20, y: 440, w: 472, h: 44 };
+const AP_OPACITY = { x: 20, y: 540, w: 472, h: 44 };
+const AP_STORAGE_KEY = 'cubeGameAppearance';
+const AP_PANEL_WIDTH = 0.225;
+
+const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const AP_ITEMS = [
+  { id: 'board', label: 'Board', parts: [{ id: '', label: 'Surface' }], alpha: true },
+  { id: 'cube', label: 'Cube faces', parts: [{ id: '', label: 'Face colour' }], alpha: true },
+  { id: 'grid', label: 'Grid lines', parts: [{ id: '', label: 'Lines' }] },
+  { id: 'edges', label: 'Cube edges', parts: [{ id: '', label: 'Edges' }] },
+  ...COLORS.map((col) => ({
+    id: col.shape,
+    label: titleCase(col.shape),
+    parts: [{ id: '.fill', label: 'Fill' }, { id: '.border', label: 'Border' }],
+  })),
+];
+
+function cssToHsv(css) {
+  const n = parseInt(css.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d > 0) {
+    if (max === r) h = ((g - b) / d + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  return { h: h * 60, s: max === 0 ? 0 : d / max, v: max };
+}
+
+const appearance = {
+  board: { h: 0, s: 0, v: 0, a: BOARD_OPACITY },
+  cube: { ...cssToHsv(CUBE_FACE_BLUE), a: CUBE_OPACITY },
+  grid: { ...cssToHsv(`#${GRID_COLOR.toString(16).padStart(6, '0')}`), a: 1 },
+  edges: { h: 0, s: 0, v: 0, a: 1 },
+};
+for (const col of COLORS) {
+  appearance[`${col.shape}.fill`] = { ...cssToHsv(col.css), a: 1 };
+  appearance[`${col.shape}.border`] = { h: 0, s: 0, v: 1, a: 1 };
+}
+try {
+  const saved = JSON.parse(localStorage.getItem(AP_STORAGE_KEY));
+  for (const key of Object.keys(appearance)) {
+    if (saved && saved[key] && ['h', 's', 'v', 'a'].every((k) => Number.isFinite(saved[key][k]))) {
+      Object.assign(appearance[key], saved[key]);
+    }
+  }
+} catch { /* ignore bad or unavailable storage */ }
+let appearanceOpen = false;
+let appearanceItem = 0;
+let appearancePart = 0;
+let appearancePrev = false;
+let appearanceTriggerPrev = false;
+let appearanceDrag = null; // 'picker' | 'bright' | 'opacity' while the trigger is held
+let cubeDirty = false;
+let cubeRebuildAt = 0;
+const dirtyShapes = new Set();
+
+const apKey = () => AP_ITEMS[appearanceItem].id + AP_ITEMS[appearanceItem].parts[appearancePart].id;
+
+function hsvToRgb(h, s, v) {
+  const f = (n) => {
+    const k = (n + h / 60) % 6;
+    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+  };
+  return [f(5), f(3), f(1)].map((c) => Math.round(c * 255));
+}
+const hsvCss = (h, s, v) => `rgb(${hsvToRgb(h, s, v).join(',')})`;
+
+function applyBoardAppearance() {
+  const b = appearance.board;
+  boardPlane.material.color.set(hsvCss(b.h, b.s, b.v));
+  boardPlane.material.opacity = b.a;
+}
+function applyLineColors() {
+  const g = appearance.grid, e = appearance.edges;
+  grid.material.vertexColors = false; // one colour for every line
+  grid.material.needsUpdate = true;
+  grid.material.color.set(hsvCss(g.h, g.s, g.v));
+  cubeEdgeMaterial.color.set(hsvCss(e.h, e.s, e.v));
+}
+function applyShapeStyles() {
+  for (const col of COLORS) {
+    const f = appearance[`${col.shape}.fill`], b = appearance[`${col.shape}.border`];
+    shapeStyles[col.shape] = { fill: hsvCss(f.h, f.s, f.v), border: hsvCss(b.h, b.s, b.v) };
+  }
+}
+function rebuildShapeTextures() {
+  for (const shape of dirtyShapes) {
+    const i = COLORS.findIndex((col) => col.shape === shape);
+    const old = iconTextures[i];
+    iconTextures[i] = makeIconTexture(shape);
+    for (const entry of icons.values()) {
+      if (entry.colorIndex === i) { entry.mesh.material.map = iconTextures[i]; entry.mesh.material.needsUpdate = true; }
+    }
+    old.dispose();
+  }
+  dirtyShapes.clear();
+}
+function rebuildCubeFaces() {
+  const c = appearance.cube;
+  const bg = hsvCss(c.h, c.s, c.v);
+  cubeMaterials.forEach((mat, i) => {
+    const old = mat.map;
+    mat.map = makeIconTexture(COLORS[cubeFaceColorIndices[i]].shape, bg);
+    mat.opacity = c.a;
+    mat.needsUpdate = true;
+    if (old) old.dispose();
+  });
+  cubeDirty = false;
+  cubeRebuildAt = performance.now();
+}
+function flushAppearance() {
+  if (dirtyShapes.size) { rebuildShapeTextures(); cubeDirty = true; }
+  if (cubeDirty) rebuildCubeFaces();
+}
+function saveAppearance() {
+  try { localStorage.setItem(AP_STORAGE_KEY, JSON.stringify(appearance)); } catch { /* ignore */ }
+}
+applyShapeStyles();
+applyBoardAppearance();
+applyLineColors();
+for (const col of COLORS) dirtyShapes.add(col.shape);
+flushAppearance();
+
+const appearanceCanvas = document.createElement('canvas');
+appearanceCanvas.width = AP_W; appearanceCanvas.height = AP_H;
+const apCtx = appearanceCanvas.getContext('2d');
+const appearanceTexture = new THREE.CanvasTexture(appearanceCanvas);
+appearanceTexture.colorSpace = THREE.SRGBColorSpace;
+const appearanceMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(AP_PANEL_WIDTH, AP_PANEL_WIDTH * AP_H / AP_W),
+  new THREE.MeshBasicMaterial({ map: appearanceTexture, transparent: true, side: THREE.DoubleSide })
+);
+appearanceMesh.position.set(0, 0.15, -0.05);
+appearanceMesh.rotation.x = -Math.PI / 4;
+appearanceMesh.visible = false;
+const appearanceLine = new THREE.Line(pointerLine.geometry, new THREE.LineBasicMaterial({ color: 0x9a9a9a }));
+appearanceLine.visible = false;
+
+function drawSlider(rect, label, fraction, trackFill) {
+  apCtx.fillStyle = '#ffffff';
+  apCtx.font = 'bold 30px system-ui, sans-serif';
+  apCtx.textAlign = 'left';
+  apCtx.textBaseline = 'alphabetic';
+  apCtx.fillText(label, rect.x, rect.y - 10);
+  apCtx.fillStyle = trackFill;
+  apCtx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  apCtx.strokeStyle = '#9a9a9a';
+  apCtx.lineWidth = 4;
+  apCtx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+  apCtx.fillStyle = '#ffffff';
+  apCtx.fillRect(rect.x + fraction * rect.w - 6, rect.y - 6, 12, rect.h + 12);
+}
+
+function drawAppearance() {
+  const item = AP_ITEMS[appearanceItem];
+  const t = appearance[apKey()];
+  apCtx.clearRect(0, 0, AP_W, AP_H);
+  apCtx.fillStyle = 'rgba(20,20,30,0.94)';
+  apCtx.fillRect(0, 0, AP_W, AP_H);
+  apCtx.strokeStyle = '#9a9a9a';
+  apCtx.lineWidth = 4;
+  apCtx.strokeRect(2, 2, AP_W - 4, AP_H - 4);
+  apCtx.textAlign = 'center';
+  apCtx.textBaseline = 'middle';
+  apCtx.font = 'bold 44px system-ui, sans-serif';
+  [['<', 10], ['>', 422]].forEach(([arrow, x]) => {
+    apCtx.fillStyle = 'rgba(60,60,80,0.9)';
+    apCtx.fillRect(x, AP_SELECT.y, 80, AP_SELECT.h);
+    apCtx.fillStyle = '#ffffff';
+    apCtx.fillText(arrow, x + 40, AP_SELECT.y + 40);
+  });
+  apCtx.fillText(item.label, AP_W / 2, AP_SELECT.y + 40);
+  const partW = (AP_W - 20) / item.parts.length;
+  item.parts.forEach((part, i) => {
+    const x = 10 + i * partW;
+    apCtx.fillStyle = i === appearancePart ? '#3498db' : 'rgba(60,60,80,0.9)';
+    apCtx.fillRect(x + 2, AP_PARTS.y, partW - 4, AP_PARTS.h);
+    apCtx.fillStyle = '#ffffff';
+    apCtx.font = 'bold 36px system-ui, sans-serif';
+    apCtx.fillText(part.label, x + partW / 2, AP_PARTS.y + 36);
+  });
+  const p = AP_PICKER;
+  const hue = apCtx.createLinearGradient(p.x, 0, p.x + p.w, 0);
+  for (let i = 0; i <= 6; i++) hue.addColorStop(i / 6, `hsl(${i * 60}, 100%, 50%)`);
+  apCtx.fillStyle = hue;
+  apCtx.fillRect(p.x, p.y, p.w, p.h);
+  const sat = apCtx.createLinearGradient(0, p.y, 0, p.y + p.h);
+  sat.addColorStop(0, 'rgba(255,255,255,0)');
+  sat.addColorStop(1, 'rgba(255,255,255,1)');
+  apCtx.fillStyle = sat;
+  apCtx.fillRect(p.x, p.y, p.w, p.h);
+  apCtx.strokeStyle = '#ffffff';
+  apCtx.lineWidth = 4;
+  apCtx.beginPath();
+  apCtx.arc(p.x + (t.h / 360) * p.w, p.y + (1 - t.s) * p.h, 12, 0, Math.PI * 2);
+  apCtx.stroke();
+  apCtx.strokeStyle = '#000000';
+  apCtx.lineWidth = 2;
+  apCtx.stroke();
+  const bright = apCtx.createLinearGradient(AP_BRIGHT.x, 0, AP_BRIGHT.x + AP_BRIGHT.w, 0);
+  bright.addColorStop(0, '#000000');
+  bright.addColorStop(1, hsvCss(t.h, t.s, 1));
+  drawSlider(AP_BRIGHT, `Brightness ${Math.round(t.v * 100)}%`, t.v, bright);
+  if (item.alpha) drawSlider(AP_OPACITY, `Opacity ${Math.round(t.a * 100)}%`, t.a, hsvCss(t.h, t.s, t.v));
+  appearanceTexture.needsUpdate = true;
+}
+
+function setAppearanceOpen(open) {
+  appearanceOpen = open && !!rightController && !!leftController;
+  if (appearanceOpen && menuOpen) setMenuOpen(false);
+  appearanceMesh.visible = appearanceOpen;
+  appearanceLine.visible = appearanceOpen;
+  appearanceDrag = null;
+  if (appearanceOpen) drawAppearance();
+  else flushAppearance();
+}
+
+const apClamp01 = (v) => Math.min(1, Math.max(0, v));
+function applyAppearanceDrag(px, py) {
+  const key = apKey();
+  const t = appearance[key];
+  if (appearanceDrag === 'picker') {
+    t.h = apClamp01((px - AP_PICKER.x) / AP_PICKER.w) * 360;
+    t.s = 1 - apClamp01((py - AP_PICKER.y) / AP_PICKER.h);
+  } else if (appearanceDrag === 'bright') {
+    t.v = apClamp01((px - AP_BRIGHT.x) / AP_BRIGHT.w);
+  } else if (appearanceDrag === 'opacity') {
+    t.a = apClamp01((px - AP_OPACITY.x) / AP_OPACITY.w);
+  }
+  if (key === 'board') applyBoardAppearance();
+  else if (key === 'cube') cubeDirty = true;
+  else if (key === 'grid' || key === 'edges') applyLineColors();
+  else {
+    applyShapeStyles();
+    dirtyShapes.add(key.split('.')[0]);
+  }
+  drawAppearance();
+}
+
+function updateAppearance(triggerHeld) {
+  let hit = null;
+  scene.updateMatrixWorld();
+  leftController.getWorldPosition(menuRaycaster.ray.origin);
+  leftController.getWorldQuaternion(menuRayQuat);
+  menuRaycaster.ray.direction.copy(menuRayDir.set(0, 0, -1).applyQuaternion(menuRayQuat));
+  const h = menuRaycaster.intersectObject(appearanceMesh)[0];
+  if (h && h.uv) hit = { x: h.uv.x * AP_W, y: (1 - h.uv.y) * AP_H };
+
+  if (triggerHeld && !appearanceTriggerPrev && hit) {
+    const item = AP_ITEMS[appearanceItem];
+    const inRect = (r, pad) => hit.x >= r.x && hit.x <= r.x + r.w && hit.y >= r.y - pad && hit.y <= r.y + r.h + pad;
+    if (hit.y >= AP_SELECT.y && hit.y <= AP_SELECT.y + AP_SELECT.h) {
+      const step = hit.x < 256 ? -1 : 1;
+      flushAppearance();
+      appearanceItem = (appearanceItem + step + AP_ITEMS.length) % AP_ITEMS.length;
+      appearancePart = 0;
+      drawAppearance();
+    } else if (hit.y >= AP_PARTS.y && hit.y <= AP_PARTS.y + AP_PARTS.h) {
+      const part = Math.min(item.parts.length - 1, Math.max(0, Math.floor((hit.x - 10) / ((AP_W - 20) / item.parts.length))));
+      if (part !== appearancePart) { flushAppearance(); appearancePart = part; drawAppearance(); }
+    } else if (inRect(AP_PICKER, 0)) appearanceDrag = 'picker';
+    else if (inRect(AP_BRIGHT, 14)) appearanceDrag = 'bright';
+    else if (item.alpha && inRect(AP_OPACITY, 14)) appearanceDrag = 'opacity';
+  }
+  if (!triggerHeld && appearanceDrag) {
+    appearanceDrag = null;
+    saveAppearance();
+  }
+  if (appearanceDrag && hit) applyAppearanceDrag(hit.x, hit.y);
+  appearanceTriggerPrev = triggerHeld;
+  if ((cubeDirty || dirtyShapes.size) && performance.now() - cubeRebuildAt > 100) flushAppearance();
+}
+
 function readXRInput() {
   const session = renderer.xr.getSession();
-  if (!session) return { grips: gripHeld, stick: null, trigger: false, menuButton: false };
+  if (!session) return { grips: gripHeld, stick: null, trigger: false, menuButton: false, appearanceButton: false, leftTrigger: false };
   let stick = null;
   let trigger = false;
   let menuButton = false;
+  let appearanceButton = false;
+  let leftTrigger = false;
   const leftDown = [];
   const sources = session.inputSources || [];
   for (const source of sources) {
     const gp = source.gamepad;
     if (!gp) continue;
     if (gp.buttons[0] && gp.buttons[0].pressed) trigger = true;
+    if (source.handedness === 'right' && gp.buttons[APPEARANCE_BUTTON] && gp.buttons[APPEARANCE_BUTTON].pressed) {
+      appearanceButton = true;
+    }
     if (source.handedness === 'left') {
+      if (gp.buttons[0] && gp.buttons[0].pressed) leftTrigger = true;
       gp.buttons.forEach((b, i) => { if (b.pressed) leftDown.push(i); });
       if (MENU_TOGGLE_BUTTONS.some((i) => gp.buttons[i] && gp.buttons[i].pressed)) menuButton = true;
     }
@@ -802,7 +1112,7 @@ function readXRInput() {
     }
   }
   leftButtonsDown = leftDown.join(',');
-  return { grips: gripHeld, stick, trigger, menuButton };
+  return { grips: gripHeld, stick, trigger, menuButton, appearanceButton, leftTrigger };
 }
 
 function updateWorldDrag(input) {
@@ -885,10 +1195,14 @@ renderer.setAnimationLoop(() => {
   if (input.menuButton && !menuPrev) setMenuOpen(!menuOpen);
   menuPrev = input.menuButton;
   if (menuOpen) updateMenuHover();
+  if (input.appearanceButton && !appearancePrev) setAppearanceOpen(!appearanceOpen);
+  appearancePrev = input.appearanceButton;
+  if (appearanceOpen) updateAppearance(input.leftTrigger);
+  const uiOpen = menuOpen || appearanceOpen;
 
   // Grip held: the stick's forward/back axis tilts the board instead of rolling.
   // Pull back raises the board toward you; push forward lays it flat.
-  if (dragging && input.stick && !menuOpen) {
+  if (dragging && input.stick && !uiOpen) {
     const y = input.stick.y;
     if (Math.abs(y) < 0.3) { tiltReady = true; tiltTimer = 0; }
     else if (Math.abs(y) > 0.6) {
@@ -902,7 +1216,7 @@ renderer.setAnimationLoop(() => {
   } else { tiltReady = true; tiltTimer = 0; }
 
   // The menu captures the stick and trigger so they don't roll the cube.
-  if (!dragging && !roll && !menuOpen) {
+  if (!dragging && !roll && !uiOpen) {
     if (input.stick) {
       const mag = Math.hypot(input.stick.x, input.stick.y);
       if (mag < 0.3) { stickReady = true; stickTimer = 0; }

@@ -4,11 +4,12 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 
 ## The game
 
-- A horizontal 10×10 board floats in front of you. It is transparent except
-  for its grid lines. The board footprint is still 2 m, so each cell is
+- A horizontal 10×10 board floats in front of you. It is a 25% opaque black
+  surface (`BOARD_OPACITY`) with grid lines, so it darkens the background behind it. The board footprint is still 2 m, so each cell is
   0.2 m — to change the board size, change `BOARD_SIZE` in `main.js`,
   not `CELL`, and the cells, cube, and icons will scale with it.
-- A cube has a different colour on each of its 6 faces:
+- A cube has deep-blue faces at 50% opacity (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
+  shape and colour as the board icons):
   Red, Green, Blue, Yellow, Purple, Orange.
 - Each coloured square shows a **flat icon lying in the plane of the board**
   (not floating above it). The icon's shape is also distinct per colour,
@@ -60,6 +61,12 @@ and Purple west.
   start a level.
   (On the Quest browser the left menu button is reported as button index 12
   and Y as 5; the debug readout's "Left buttons down" line shows the indices.)
+- **Right B button**: opens/closes the appearance panel on the right controller. Point the left controller at
+  it and hold the left trigger to drag. The `<` / `>` buttons cycle through items (Board, Cube faces, Grid
+  lines, Cube edges, and each shape: Circle, Triangle, Square, Star, Diamond, Hexagon). Shapes have Fill and
+  Border tabs. The colour picker (hue across, saturation down) and Brightness slider update live; Opacity
+  appears for the board and cube faces. Grid lines are now one colour. Values are saved in `localStorage`.
+  The stick and trigger are captured while it is open.
 
 ### Desktop (for testing logic without a headset)
 - Arrow keys / WASD: roll.
