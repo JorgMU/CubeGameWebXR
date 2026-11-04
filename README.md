@@ -4,9 +4,9 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 
 ## The game
 
-- A horizontal 10×10 board floats in front of you. It is a 34% opaque green
+- A horizontal 11×11 board floats in front of you. It is a 34% opaque green
   surface (`BOARD_COLOR`, `BOARD_OPACITY`) with yellow grid lines, so it tints the background behind it. The board footprint is still 2 m, so each cell is
-  0.2 m — to change the board size, change `BOARD_SIZE` in `main.js`,
+  about 0.182 m — to change the board size, change `BOARD_SIZE` in `main.js`,
   not `CELL`, and the cells, cube, and icons will scale with it.
 - A cube has deep-blue faces at 63% opacity (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
   shape and colour as the board icons). Default colours were captured from the appearance panel's colour table.
@@ -22,8 +22,8 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
   guarantees at least 6 coloured squares. There is no timer and no lose
   condition in the current version. Rolling off the edge is blocked.
 
-The cube starts at column 5, row 5 (the south-east cell of the central
-four on an even-sized board). Its initial face orientation is: Blue up,
+The cube starts at the center cell (column 5, row 5), on the center row.
+Its initial face orientation is: Blue up,
 Orange down, Green north (away from the player), Yellow south, Red east,
 and Purple west.
 
