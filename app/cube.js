@@ -13,7 +13,7 @@ export function initCube(iconTextures) {
     INITIAL_ORIENTATION.down, INITIAL_ORIENTATION.south, INITIAL_ORIENTATION.north,
   ];
 
-  cubeMaterials = createCubeMaterials(iconTextures);
+  cubeMaterials = createCubeMaterials(iconTextures, cubeFaceColorIndices);
   cube = new THREE.Mesh(new THREE.BoxGeometry(CUBE, CUBE, CUBE), cubeMaterials);
   
   const cubeEdgeMaterial = createCubeEdgeMaterial();

@@ -15,8 +15,8 @@ export function createCubeFaceMaterial(colorIndex, iconTextures) {
   });
 }
 
-export function createCubeMaterials(iconTextures) {
-  return COLORS.map((_, colorIndex) => createCubeFaceMaterial(colorIndex, iconTextures));
+export function createCubeMaterials(iconTextures, cubeFaceColorIndices) {
+  return cubeFaceColorIndices.map(colorIndex => createCubeFaceMaterial(colorIndex, iconTextures));
 }
 
 export function createCubeEdgeMaterial() {
