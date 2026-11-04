@@ -15,7 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@20:47:05';
+const BUILD_TIMESTAMP = '2026-11-03@21:04:14';
 const GRID = 10;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -33,9 +33,9 @@ const START_ROW = Math.floor(GRID / 2);
 
 // Colour order is also the cube-face index order.
 const COLORS = [
-  { name: 'Red',    hex: 0xc10303, css: '#c10303', shape: 'circle' },
-  { name: 'Green',  hex: 0x049f27, css: '#049f27', shape: 'triangle' },
-  { name: 'Blue',   hex: 0x354cff, css: '#354cff', shape: 'square' },
+  { name: 'Red', hex: 0xc10303, css: '#c10303', shape: 'circle' },
+  { name: 'Green', hex: 0x049f27, css: '#049f27', shape: 'triangle' },
+  { name: 'Blue', hex: 0x354cff, css: '#354cff', shape: 'square' },
   { name: 'Yellow', hex: 0xf1c40f, css: '#f1c40f', shape: 'star' },
   { name: 'Purple', hex: 0x9b59b6, css: '#9b59b6', shape: 'diamond' },
   { name: 'Orange', hex: 0xe67e22, css: '#e67e22', shape: 'hexagon' },
@@ -520,10 +520,10 @@ let roll = null; // {t, axis, totalAngle, edge, startOffset, startQuat, endPos, 
 function tryRoll(dir) {
   if (roll || win) return;
   let dCol = 0, dRow = 0, axis = null, totalAngle = 0;
-  if (dir === 'east')  { dCol = 1;  axis = new THREE.Vector3(0, 0, 1); totalAngle = -Math.PI / 2; }
-  if (dir === 'west')  { dCol = -1; axis = new THREE.Vector3(0, 0, 1); totalAngle = Math.PI / 2; }
+  if (dir === 'east') { dCol = 1; axis = new THREE.Vector3(0, 0, 1); totalAngle = -Math.PI / 2; }
+  if (dir === 'west') { dCol = -1; axis = new THREE.Vector3(0, 0, 1); totalAngle = Math.PI / 2; }
   if (dir === 'north') { dRow = -1; axis = new THREE.Vector3(1, 0, 0); totalAngle = -Math.PI / 2; }
-  if (dir === 'south') { dRow = 1;  axis = new THREE.Vector3(1, 0, 0); totalAngle = Math.PI / 2; }
+  if (dir === 'south') { dRow = 1; axis = new THREE.Vector3(1, 0, 0); totalAngle = Math.PI / 2; }
   const destCol = cubeCol + dCol;
   const destRow = cubeRow + dRow;
   if (destCol < 0 || destCol >= GRID || destRow < 0 || destRow >= GRID) {
@@ -550,8 +550,8 @@ function tryRoll(dir) {
 
 function applyOrientationAfterRoll(dir) {
   const o = orientation;
-  if (dir === 'east')  orientation = { ...o, down: o.east, east: o.up, up: o.west, west: o.down };
-  if (dir === 'west')  orientation = { ...o, down: o.west, west: o.up, up: o.east, east: o.down };
+  if (dir === 'east') orientation = { ...o, down: o.east, east: o.up, up: o.west, west: o.down };
+  if (dir === 'west') orientation = { ...o, down: o.west, west: o.up, up: o.east, east: o.down };
   if (dir === 'north') orientation = { ...o, down: o.north, north: o.up, up: o.south, south: o.down };
   if (dir === 'south') orientation = { ...o, down: o.south, south: o.up, up: o.north, north: o.down };
 }
@@ -582,7 +582,7 @@ function finishRoll() {
         completedAt: new Date().toLocaleDateString(),
       });
       updateSessionRecords();
-      message = 'Level complete! Press N, or a trigger in MR, for the next level.';
+      message = `Level complete! ${renderer.xr.isPresenting ? 'Pull a trigger' : 'Press N'} for the next level.`;
     } else {
       message = `Matched ${COLORS[orientation.down].name}! ${remaining} left.`;
     }
@@ -654,7 +654,7 @@ for (const i of [0, 1]) {
 
 let stickReady = true;
 let stickTimer = 0;
-const STICK_REPEAT_SECONDS = 0.125; // one square per eighth of a second while the stick is held
+const STICK_REPEAT_SECONDS = 0.05; // one square per twentieth of a second while the stick is held
 let triggerPrev = false;
 let drag = null; // {mode: 0 | 1 | 'both', mid, angle, dist, worldPos, worldQuat, worldScale}
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpMid = new THREE.Vector3();
@@ -1248,7 +1248,7 @@ function readXRInput() {
       if (source.handedness === 'right' && typeof ax === 'number' && typeof ay === 'number') rightStick = { x: ax, y: ay };
       // Either thumbstick can roll the cube; use whichever is pushed further.
       if (typeof ax === 'number' && typeof ay === 'number'
-          && (!stick || Math.hypot(ax, ay) > Math.hypot(stick.x, stick.y))) {
+        && (!stick || Math.hypot(ax, ay) > Math.hypot(stick.x, stick.y))) {
         stick = { x: ax, y: ay };
       }
     }
