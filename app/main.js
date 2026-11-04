@@ -2,6 +2,21 @@ import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
+// Import configuration
+import { BUILD_TIMESTAMP, GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, SESSION_RECORDS_MAX, BOARD_COLOR, BOARD_OPACITY, CUBE_FACE_BLUE, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
+
+// Import utilities
+import { cellToLocal, keyOf, hsvToRgb, rgbToHex, hsvCss, cssToHsv, apClamp01, formatTime, triggerHaptic } from './utils.js';
+
+// Import state management
+import { gameState, resetCubePosition, setLevel, setMessage, setWin, getRoll, setRoll, addSessionRecord, getAppearance, setAppearance, markCubeColorDirty, clearCubeColorDirty, addDirtyCubeShape, clearDirtyCubeShapes, addDirtyShape, clearDirtyShapes } from './state.js';
+
+// Import scene and rendering modules
+import { initScene, getRenderer, getScene, getCamera, getWorldGroup, onWindowResize, setAnimationLoop, xrGetSession, xrIsPresenting } from './scene.js';
+import { initShapeStyles, shapeStyles, drawIcon, makeIconTexture, redrawIconTexture, createIconTextures } from './textures.js';
+import { createBoardMaterial, createGridMaterial, createIconMaterial, createSkyMaterial, createPanelMaterial, createDebugMaterial } from './materials.js';
+import { initCube, getCube, getCubeMaterials, getCubeFaceColorIndices, setCubePosition, resetCubeTransform, getCubePosition, getCubeQuaternion, setCubeQuaternion, applyRollAnimation, setCubeMaterialOpacity } from './cube.js';
+
 // ---------------------------------------------------------------------------
 // Cube Game WebXR — v5, 11x11 board
 // A horizontal 11x11 board floating in front of the player. Roll a cube with a
@@ -15,97 +30,22 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@23:26:33';
-const GRID = 11;
-// Board size is the anchor: CELL is derived from it, so increasing GRID
-// shrinks the cells (and the cube and icons, which are sized from CELL)
-// instead of growing the board. Change BOARD_SIZE, not CELL, if you want
-// a physically larger or smaller board.
-const BOARD_SIZE = 2.0; // m, board footprint — unchanged from the 5x5 version
-const CELL = BOARD_SIZE / GRID; // about 0.182 m for an 11x11 board
-const CUBE = CELL; // cube fills a cell, so rolling over its edge lands centred
-const COLORED_FRACTION = 0.5;
-const ROLL_SECONDS = 0.1;
-// The odd grid has a single centre cell.
-const START_COL = Math.floor(GRID / 2);
-const START_ROW = Math.floor(GRID / 2);
+// Initialize Three.js scene, camera, renderer
+initScene();
 
-// Colour order is also the cube-face index order.
-const COLORS = [
-  { name: 'Red', hex: 0xc10303, css: '#c10303', shape: 'circle' },
-  { name: 'Green', hex: 0x049f27, css: '#049f27', shape: 'triangle' },
-  { name: 'Blue', hex: 0x354cff, css: '#354cff', shape: 'square' },
-  { name: 'Yellow', hex: 0xf1c40f, css: '#f1c40f', shape: 'star' },
-  { name: 'Purple', hex: 0x9b59b6, css: '#9b59b6', shape: 'diamond' },
-  { name: 'Orange', hex: 0xe67e22, css: '#e67e22', shape: 'hexagon' },
-];
+const renderer = getRenderer();
+const scene = getScene();
+const camera = getCamera();
+const worldGroup = getWorldGroup();
 
-const INITIAL_ORIENTATION = { up: 2, down: 5, north: 1, south: 3, east: 0, west: 4 };
-// Orientation fields: up/down/north/south/east/west, each a COLORS index.
-// North = -z (away from player), south = +z (toward player).
-
-function cellToLocal(col, row) {
-  // Centre the logical grid on the board centre for ANY grid size.
-  // The old code hard-coded (col - 2), which was only correct for 5x5:
-  // it shifted icons and the cube and let the outer cells spill past the edge.
-  const centre = (GRID - 1) / 2; // 5 for an 11x11 board
-  return new THREE.Vector3((col - centre) * CELL, 0, (row - centre) * CELL);
-}
-
-// --- Renderer / scene / camera (desktop fallback view) ---------------------
-const canvas = document.getElementById('renderCanvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-renderer.setClearColor(0x000000, 0);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.xr.enabled = true;
-// Mixed reality only: one immersive-ar session (the WebXR name for it), which
-// is what gives the Quest its passthrough. The button's "AR" text is shown as "MR".
-const mrButton = ARButton.createButton(renderer);
-new MutationObserver(() => {
-  const text = mrButton.textContent.replace(/\bAR\b/, 'MR');
-  if (text !== mrButton.textContent) mrButton.textContent = text;
-}).observe(mrButton, { childList: true, characterData: true, subtree: true });
-mrButton.textContent = mrButton.textContent.replace(/\bAR\b/, 'MR');
-document.body.appendChild(mrButton);
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
-
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
-camera.position.set(0, 4.2, 1.8);
-camera.lookAt(0, 1.0, -2.0);
-
-scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-sun.position.set(3, 6, 2);
-scene.add(sun);
-
-// --- World group ------------------------------------------------------------
-// Everything the player drags lives in here: board, icons, cube, panel.
-// Its origin is the board centre, so yaw rotation turns the board in place
-// instead of orbiting it around the player. Dragging this group is, to the
-// player, the same as moving the player the opposite way.
-const worldGroup = new THREE.Group();
-// Home poses for the board, one per display mode, all in one place.
-// position is in metres relative to the player's floor origin; tilt is degrees
-// (0 flat, 90 facing the player).
-const HOMES = {
-  desktop: { position: new THREE.Vector3(0, 0.5, -2.0), tilt: 0, scale: 1 },
-  mr: { position: new THREE.Vector3(0, -0.1, -1.75), tilt: 30, scale: 0.75 },
-};
 function currentHome() {
-  return renderer.xr.getSession() ? HOMES.mr : HOMES.desktop;
+  return xrGetSession() ? HOMES.mr : HOMES.desktop;
 }
-const EXIT_MESSAGE_RISE = 0.4; // metres above eye height, clear of the tilted board
-// Rotation/scale gain for the two-grip drag (1 = hands map 1:1).
-const ROTATE_GAIN = 0.4, SCALE_GAIN = 0.4;
-// Board tilt about its own left-right axis: 0 = flat face up, 90 = facing the
-// player, 180 = upside down. Changed in steps while a grip is held.
-const TILT_STEP = 5, TILT_MAX = 180, TILT_REPEAT_SECONDS = 0.2;
-let tiltDeg = 0;
+
+// Board and tilt
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const TILT_AXIS = new THREE.Vector3(1, 0, 0);
+let tiltDeg = 0;
 let tiltReady = true, tiltTimer = 0;
 
 // Tilt about the board's own left-right axis; positive raises the far edge.
@@ -118,8 +58,6 @@ function stepTilt(dir) {
   tiltDeg = next;
   updateDebug();
 }
-worldGroup.position.copy(HOMES.desktop.position);
-scene.add(worldGroup);
 
 // --- Sky ----------------------------------------------------------------------
 // NASA SVS "Deep Star Maps 2020" (celestial coordinates, north celestial pole
@@ -129,7 +67,6 @@ scene.add(worldGroup);
 // inside the camera far plane. Two versions: "adjusted" (glow removed, stars
 // softened and brightened) and "raw" (plain sRGB conversion of the NASA data).
 // Resolution is what matters in a headset: 8k when the GPU allows it, else 4k.
-const SKY_RADIUS = 30;
 const skySuffix = renderer.capabilities.maxTextureSize >= 8192 ? '8k' : '4k';
 const skyMaterial = new THREE.MeshBasicMaterial({ depthWrite: false, fog: false });
 const skyGeometry = new THREE.SphereGeometry(SKY_RADIUS, 96, 48);
@@ -139,13 +76,11 @@ skyMesh.renderOrder = -1;
 skyMesh.visible = false; // until the first texture arrives
 worldGroup.add(skyMesh);
 
-const SKY_MODES = ['Adjusted', 'Raw', 'Off', 'Passthrough'];
-const SKY_MESSAGES = ['adjusted', 'raw (unadjusted NASA data)', 'off (black)', 'passthrough'];
 let skyMode = 0;
 let skyRequest = 0;
 // Passthrough needs an immersive-ar session whose display blends with the real world.
 function passthroughAvailable() {
-  const session = renderer.xr.isPresenting ? renderer.xr.getSession() : null;
+  const session = xrIsPresenting() ? xrGetSession() : null;
   return !!session && session.environmentBlendMode !== undefined && session.environmentBlendMode !== 'opaque';
 }
 function nextSkyMode() {
@@ -186,8 +121,6 @@ function toggleSky() {
 loadSky();
 
 // Transparent board: faint plane + grid lines.
-const BOARD_COLOR = '#0d8407';
-const BOARD_OPACITY = 0.34; // tinted board surface, darkens the sky/passthrough behind it
 const boardPlane = new THREE.Mesh(
   new THREE.PlaneGeometry(BOARD_SIZE, BOARD_SIZE),
   new THREE.MeshBasicMaterial({ color: BOARD_COLOR, transparent: true, opacity: BOARD_OPACITY, depthWrite: false, side: THREE.DoubleSide })
@@ -197,89 +130,17 @@ boardPlane.rotation.x = -Math.PI / 2;
 boardPlane.position.y = 0.001;
 worldGroup.add(boardPlane);
 
-const GRID_COLOR = 0xfff005; // single colour so the panel can recolour every line
-const grid = new THREE.GridHelper(BOARD_SIZE, GRID, GRID_COLOR, GRID_COLOR);
+const grid = new THREE.GridHelper(BOARD_SIZE, GRID, 0xfff005, 0xfff005);
 grid.position.y = 0.005;
 worldGroup.add(grid);
 
-// --- Flat icons (lie flat in the plane of the board) ------------------------
-// Fill and border colour per shape; the appearance panel edits these.
-const SHAPE_BORDER_WIDTH = 4; // px on the 256 px icon texture
-const SHAPE_BORDER_COLOR = '#f9ff2c';
-const shapeStyles = {};
-for (const col of COLORS) shapeStyles[col.shape] = { fill: col.css, border: SHAPE_BORDER_COLOR, width: SHAPE_BORDER_WIDTH };
+// Initialize shape styles and icon textures
+initShapeStyles();
+const iconTextures = createIconTextures();
 
-function drawIcon(c, shape, background = null) {
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, 256, 256);
-  if (background) { ctx.fillStyle = background; ctx.fillRect(0, 0, 256, 256); }
-  ctx.fillStyle = shapeStyles[shape].fill;
-  ctx.strokeStyle = shapeStyles[shape].border;
-  ctx.lineWidth = Math.max(shapeStyles[shape].width, 0.01);
-  ctx.beginPath();
-  const cx = 128, cy = 128, r = 84;
-  if (shape === 'circle') {
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  } else if (shape === 'triangle') {
-    ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy + r * 0.8); ctx.lineTo(cx - r, cy + r * 0.8); ctx.closePath();
-  } else if (shape === 'square') {
-    ctx.rect(cx - r * 0.8, cy - r * 0.8, r * 1.6, r * 1.6);
-  } else if (shape === 'diamond') {
-    ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy); ctx.closePath();
-  } else if (shape === 'hexagon') {
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i - Math.PI / 6;
-      const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  } else if (shape === 'star') {
-    for (let i = 0; i < 10; i++) {
-      const a = -Math.PI / 2 + (Math.PI / 5) * i;
-      const rr = i % 2 === 0 ? r : r * 0.45;
-      const x = cx + rr * Math.cos(a), y = cy + rr * Math.sin(a);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-  ctx.fill(); ctx.stroke();
-}
-function makeIconTexture(shape, background = null) {
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 256;
-  drawIcon(c, shape, background);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-// Redraws an existing icon texture in place, so dragging a slider re-uploads
-// pixels instead of allocating and disposing GPU textures.
-function redrawIconTexture(tex, shape, background = null) {
-  drawIcon(tex.image, shape, background);
-  tex.needsUpdate = true;
-}
-const iconTextures = COLORS.map((col) => makeIconTexture(col.shape));
-
-// --- Cube -------------------------------------------------------------------
-// Deep-blue faces carrying the same coloured symbol as the board icons.
-const CUBE_FACE_BLUE = '#0b1d65';
-const CUBE_OPACITY = 0.6;
-const cubeFaceMaterial = (colorIndex) => new THREE.MeshStandardMaterial({
-  map: makeIconTexture(COLORS[colorIndex].shape, CUBE_FACE_BLUE),
-  transparent: true,
-  opacity: CUBE_OPACITY,
-  depthWrite: true,
-  depthTest: false,
-  side: THREE.DoubleSide, // inner faces show through the translucent cube
-});
-// BoxGeometry material order: +x east, -x west, +y up, -y down, +z south, -z north.
-const cubeFaceColorIndices = [
-  INITIAL_ORIENTATION.east, INITIAL_ORIENTATION.west, INITIAL_ORIENTATION.up,
-  INITIAL_ORIENTATION.down, INITIAL_ORIENTATION.south, INITIAL_ORIENTATION.north,
-];
-const cubeMaterials = cubeFaceColorIndices.map(cubeFaceMaterial);
-const cube = new THREE.Mesh(new THREE.BoxGeometry(CUBE, CUBE, CUBE), cubeMaterials);
-const CUBE_EDGE_COLOR = '#767f0f';
+// Initialize cube
+initCube(iconTextures);
+const cube = getCube();
 const cubeEdgeMaterial = new THREE.LineBasicMaterial({ color: CUBE_EDGE_COLOR });
 cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(cube.geometry), cubeEdgeMaterial));
 cube.renderOrder = 1; // after the board and icons so they show through it
@@ -305,7 +166,6 @@ worldGroup.add(panel);
 // Shows where the viewer is and how the board is posed. Both are in the same
 // scene (tracking-space) coordinates, so the numbers can be compared directly.
 // Toggle with the P key; refreshed a few times a second, not every frame.
-const DEBUG_SECONDS = 0.2;
 let debugVisible = true;
 let debugTimer = 0;
 const debugCanvas = document.createElement('canvas');
@@ -413,7 +273,6 @@ let icons = new Map();   // "col,row" -> {colorIndex, mesh}
 let remaining = 0;
 let win = false;
 let message = 'Roll the cube onto a matching flat icon.';
-const MESSAGE_SECONDS = 3;
 let lastMessageSeen = null;
 let messageShownAt = 0;
 let levelStartedAt = null;
@@ -426,13 +285,6 @@ function elapsedLevelSeconds(now = performance.now()) {
   if (levelStartedAt === null) return 0;
   return Math.floor(((levelEndedAt ?? now) - levelStartedAt) / 1000);
 }
-
-function formatTime(seconds) {
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
-}
-
-function keyOf(col, row) { return `${col},${row}`; }
 
 function removeIcon(entry) {
   worldGroup.remove(entry.mesh);
@@ -608,20 +460,6 @@ function applyOrientationAfterRoll(dir) {
 
 // Pulses controllers in MR; hand is 'left', 'right' or omitted for both.
 let lastHapticAt = 0;
-function triggerHaptic(intensity = 0.5, duration = 50, hand = null) {
-  const session = renderer.xr.getSession();
-  if (!session) return;
-  for (const source of session.inputSources || []) {
-    if (hand && source.handedness !== hand) continue;
-    const gp = source.gamepad;
-    if (!gp) continue;
-    try {
-      const actuator = gp.hapticActuators && gp.hapticActuators[0];
-      if (actuator && actuator.pulse) actuator.pulse(intensity, duration);
-      else if (gp.vibrationActuator) gp.vibrationActuator.playEffect('dual-rumble', { duration, strongMagnitude: intensity, weakMagnitude: intensity });
-    } catch { /* haptics are optional */ }
-  }
-}
 
 // Synthesized click (no audio asset). The context is created and resumed on
 // the first user gesture because browsers block audio before that.
@@ -1049,14 +887,6 @@ controller1.addEventListener('selectstart', () => { if (controller1 === rightCon
 // brightness slider and, where it applies, an opacity slider. Values persist
 // in localStorage.
 const APPEARANCE_BUTTON = 5; // B on the right Touch controller
-const AP_W = 512, AP_H = 610;
-const AP_SELECT = { y: 10, h: 80 };
-const AP_PARTS = { y: 100, h: 70 };
-const AP_PICKER = { x: 10, y: 190, w: 492, h: 200 };
-const AP_BRIGHT = { x: 20, y: 440, w: 472, h: 44 };
-const AP_OPACITY = { x: 20, y: 540, w: 472, h: 44 };
-const AP_STORAGE_KEY = 'cubeGameAppearance';
-const AP_PANEL_WIDTH = 0.225;
 
 const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const AP_ITEMS = [
@@ -1071,19 +901,6 @@ const AP_ITEMS = [
     parts: [{ id: '.fill', label: 'Fill' }],
   })),
 ];
-
-function cssToHsv(css) {
-  const n = parseInt(css.slice(1), 16);
-  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-  let h = 0;
-  if (d > 0) {
-    if (max === r) h = ((g - b) / d + 6) % 6;
-    else if (max === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-  }
-  return { h: h * 60, s: max === 0 ? 0 : d / max, v: max };
-}
 
 const appearance = {
   board: { ...cssToHsv(BOARD_COLOR), a: BOARD_OPACITY },
@@ -1114,20 +931,9 @@ let cubeColorDirty = false;
 let cubeRebuildAt = 0;
 const dirtyShapes = new Set();
 const dirtyCubeShapes = new Set();
-const APPEARANCE_REBUILD_MS = 250; // texture redraws while a slider is held
 
 const apKey = () => AP_ITEMS[appearanceItem].id + AP_ITEMS[appearanceItem].parts[appearancePart].id;
-const BORDER_WIDTH_MAX = 30; // px on the 256 px icon texture
 const isBorderKey = (key) => key === 'shapeBorder';
-
-function hsvToRgb(h, s, v) {
-  const f = (n) => {
-    const k = (n + h / 60) % 6;
-    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
-  };
-  return [f(5), f(3), f(1)].map((c) => Math.round(c * 255));
-}
-const hsvCss = (h, s, v) => `rgb(${hsvToRgb(h, s, v).join(',')})`;
 
 function applyBoardAppearance() {
   const b = appearance.board;
@@ -1156,12 +962,13 @@ function rebuildShapeTextures() {
 }
 function applyCubeOpacity() {
   const a = appearance.cube.a;
-  cubeMaterials.forEach((mat) => { mat.opacity = a; });
+  getCubeMaterials().forEach((mat) => { mat.opacity = a; });
 }
 function rebuildCubeFaces() {
   const bg = hsvCss(appearance.cube.h, appearance.cube.s, appearance.cube.v);
+  const cubeMaterials = getCubeMaterials();
   cubeMaterials.forEach((mat, i) => {
-    const shape = COLORS[cubeFaceColorIndices[i]].shape;
+    const shape = COLORS[getCubeFaceColorIndices()[i]].shape;
     if (cubeColorDirty || dirtyCubeShapes.has(shape)) redrawIconTexture(mat.map, shape, bg);
   });
   applyCubeOpacity();
@@ -1313,7 +1120,6 @@ function setAppearanceOpen(open) {
   else flushAppearance();
 }
 
-const apClamp01 = (v) => Math.min(1, Math.max(0, v));
 function applyAppearanceDrag(px, py) {
   const key = apKey();
   const t = appearance[key];
