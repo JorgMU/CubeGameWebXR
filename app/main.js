@@ -15,7 +15,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
-const BUILD_TIMESTAMP = '2026-11-03@22:12:00';
+const BUILD_TIMESTAMP = '2026-11-03@22:55:00';
 const GRID = 11;
 // Board size is the anchor: CELL is derived from it, so increasing GRID
 // shrinks the cells (and the cube and icons, which are sized from CELL)
@@ -606,6 +606,65 @@ function applyOrientationAfterRoll(dir) {
   if (dir === 'south') orientation = { ...o, down: o.south, south: o.up, up: o.north, north: o.down };
 }
 
+// Pulses controllers in MR; hand is 'left', 'right' or omitted for both.
+let lastHapticAt = 0;
+function triggerHaptic(intensity = 0.5, duration = 50, hand = null) {
+  const session = renderer.xr.getSession();
+  if (!session) return;
+  for (const source of session.inputSources || []) {
+    if (hand && source.handedness !== hand) continue;
+    const gp = source.gamepad;
+    if (!gp) continue;
+    try {
+      const actuator = gp.hapticActuators && gp.hapticActuators[0];
+      if (actuator && actuator.pulse) actuator.pulse(intensity, duration);
+      else if (gp.vibrationActuator) gp.vibrationActuator.playEffect('dual-rumble', { duration, strongMagnitude: intensity, weakMagnitude: intensity });
+    } catch { /* haptics are optional */ }
+  }
+}
+
+// Synthesized click (no audio asset). The context is created and resumed on
+// the first user gesture because browsers block audio before that.
+let audioCtx = null;
+function unlockAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch { /* audio is optional */ }
+}
+for (const type of ['keydown', 'pointerdown']) window.addEventListener(type, unlockAudio);
+
+function playClick() {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(900, t);
+  osc.frequency.exponentialRampToValueAtTime(300, t + 0.03);
+  gain.gain.setValueAtTime(0.12, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.05);
+}
+
+function playSwoop() {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(350, t);
+  osc.frequency.exponentialRampToValueAtTime(1400, t + 0.22);
+  gain.gain.setValueAtTime(0.001, t);
+  gain.gain.exponentialRampToValueAtTime(0.14, t + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.28);
+}
+
 function finishRoll() {
   cubeCol = roll.destCol; cubeRow = roll.destRow;
   cube.position.copy(roll.endPos);
@@ -622,6 +681,8 @@ function finishRoll() {
     icons.delete(keyOf(cubeCol, cubeRow));
     remaining -= 1;
     levelScore += Math.max(0, 180 - elapsedLevelSeconds(matchAt));
+    triggerHaptic(remaining <= 0 ? 1 : 0.8, remaining <= 0 ? 250 : 100);
+    playSwoop();
     if (remaining <= 0) {
       win = true;
       levelEndedAt = matchAt;
@@ -637,8 +698,12 @@ function finishRoll() {
       message = `Matched ${COLORS[orientation.down].name}! ${remaining} left.`;
     }
   } else if (entry) {
+    playClick();
+    triggerHaptic(0.3, 25);
     message = `Down is ${COLORS[orientation.down].name}, square needs ${COLORS[entry.colorIndex].name}.`;
   } else {
+    playClick();
+    triggerHaptic(0.3, 25);
     message = 'Blank square.';
   }
   updateHUD();
@@ -726,6 +791,7 @@ function resetWorldForMR() {
   worldGroup.scale.setScalar(home.scale);
 }
 renderer.xr.addEventListener('sessionstart', () => {
+  unlockAudio();
   resetWorldForMR();
   restartLevel(); // entering or leaving MR restarts the current board
 });
@@ -870,6 +936,7 @@ function activateMenuItem() {
   if (!menuOpen) return;
   const selected = menuHover;
   if (selected < 0) return;
+  triggerHaptic(0.4, 40, 'left');
   setMenuOpen(false);
   if (selected === 0) {
     debugVisible = !debugVisible;
@@ -1206,6 +1273,8 @@ function applyAppearanceDrag(px, py) {
     }
   }
   if (!changed) return;
+  const now = performance.now();
+  if (now - lastHapticAt > 80) { lastHapticAt = now; triggerHaptic(0.1, 15, 'left'); }
   if (key === 'board') applyBoardAppearance();
   else if (key === 'cube') {
     applyCubeOpacity(); // opacity is a material value, so it updates live without touching textures
@@ -1252,6 +1321,7 @@ function updateAppearance(triggerHeld, rightStick) {
   if (h && h.uv) hit = { x: h.uv.x * AP_W, y: (1 - h.uv.y) * AP_H };
 
   if (triggerHeld && !appearanceTriggerPrev && hit) {
+    triggerHaptic(0.3, 30, 'left');
     const item = AP_ITEMS[appearanceItem];
     const inRect = (r, pad) => hit.x >= r.x && hit.x <= r.x + r.w && hit.y >= r.y - pad && hit.y <= r.y + r.h + pad;
     if (hit.y >= AP_SELECT.y && hit.y <= AP_SELECT.y + AP_SELECT.h) {
