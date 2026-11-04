@@ -64,6 +64,52 @@
   </div>
 </div>
 <canvas id="renderCanvas"></canvas>
-<script type="module" src="./main.js"></script>
+<script>
+  // Check if files have been updated since last load
+  const FILES_TO_CHECK = ['./index.html', './main.js', './config.js', './cube.js', './materials.js'];
+  
+  async function calculateBuildTimestamp() {
+    const timestamps = [];
+    for (const file of FILES_TO_CHECK) {
+      try {
+        const response = await fetch(file, { method: 'GET', headers: { 'Range': 'bytes=0-0' } });
+        const lastModified = response.headers.get('Last-Modified');
+        if (lastModified) timestamps.push(new Date(lastModified));
+      } catch (e) {}
+    }
+    if (timestamps.length === 0) return new Date().toISOString();
+    const newestTime = new Date(Math.max(...timestamps.map(t => t.getTime())));
+    const y = newestTime.getFullYear();
+    const m = String(newestTime.getMonth() + 1).padStart(2, '0');
+    const d = String(newestTime.getDate()).padStart(2, '0');
+    const h = String(newestTime.getHours()).padStart(2, '0');
+    const min = String(newestTime.getMinutes()).padStart(2, '0');
+    const s = String(newestTime.getSeconds()).padStart(2, '0');
+    return `${y}-${m}-${d}@${h}:${min}:${s}`;
+  }
+  
+  async function initializeApp() {
+    const currentTimestamp = await calculateBuildTimestamp();
+    const storedTimestamp = sessionStorage.getItem('buildTimestamp');
+    
+    // If timestamp changed, reload to get fresh cache
+    if (storedTimestamp && storedTimestamp !== currentTimestamp) {
+      sessionStorage.setItem('buildTimestamp', currentTimestamp);
+      location.reload();
+      return; // Stop here, reload will restart script
+    }
+    
+    // Store timestamp for next session
+    sessionStorage.setItem('buildTimestamp', currentTimestamp);
+    
+    // Load main.js with cache-busting query parameter
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.src = `./main.js?v=${currentTimestamp}`;
+    document.body.appendChild(script);
+  }
+  
+  initializeApp();
+</script>
 </body>
 </html>
