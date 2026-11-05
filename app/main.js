@@ -16,7 +16,7 @@ import { cellToLocal, keyOf, hsvCss, cssToHsv, apClamp01, formatTime, triggerHap
 // Import state management
 import {
   gameState,
-  getLevel, setLevel, nextLevel,
+  getLevel, setLevel, nextLevel as incrementLevel,
   getRemaining, setRemaining, getWin, setWin,
   getCubePosition, setCubePosition, getOrientation, setOrientation, resetCubePosition, getLevelStartedAt, setLevelStartedAt,
   setLevelEndedAt,
@@ -335,6 +335,12 @@ function removeIconMesh(entry) {
 
 function buildIconsFromPattern() {
   const icons = getIcons();
+  // clearIcons() only clears the map; without removing the old meshes first,
+  // a rebuild (e.g. entering/leaving MR, which restarts the level) left the
+  // old icons in worldGroup underneath the new ones. Matching then removed
+  // only the new mesh, so the old one stayed visible while the game logic
+  // correctly counted the square as cleared. Remove old meshes first.
+  for (const entry of icons.values()) removeIconMesh(entry);
   clearIcons();
   const pattern = getPattern();
   for (const cell of pattern) {
@@ -348,6 +354,11 @@ function buildIconsFromPattern() {
     addIcon(keyOf(cell.col, cell.row), { colorIndex: cell.colorIndex, mesh });
   }
   setRemaining(pattern.length);
+}
+
+function nextLevel() {
+  incrementLevel();
+  generateLevel();
 }
 
 function generateLevel() {
@@ -763,6 +774,14 @@ function resetWorldForMR() {
 }
 renderer.xr.addEventListener('sessionstart', () => {
   unlockAudio();
+  // Start clean: a menu/appearance panel left visible by a previous session
+  // must not already be up (and hovered) on relaunch, or the first trigger
+  // press will immediately activate whatever row it was pointing at.
+  setMenuOpenLocal(false);
+  setAppearanceOpenLocal(false);
+  setMenuPrev(false);
+  setAppearancePrev(false);
+  setTriggerPrev(false);
   resetWorldForMR();
   restartLevel(); // entering or leaving MR restarts the current board
 });
@@ -773,7 +792,12 @@ renderer.xr.addEventListener('sessionend', () => {
   gripHeld.fill(false); setDrag(null); setExitPending(false);
   exitMessageMesh.visible = false;
   if (getSkyMode() === 3) { setSkyMode(0); loadSky(); } // passthrough only exists inside the session
-  setMenuOpen(false);
+  // Use the Local closers, not the state-only setters: they hide the meshes
+  // and pointer line and reset hover to -1. setMenuOpen(false) alone left
+  // menuMesh.visible true and the old hover (e.g. Exit MR) intact, so the
+  // menu was still up on relaunch and the next trigger press re-activated it.
+  setMenuOpenLocal(false);
+  setAppearanceOpenLocal(false);
   restartLevel();
 });
 
@@ -1162,14 +1186,18 @@ function drawAppearanceBase() {
   sat.addColorStop(1, 'rgba(255,255,255,1)');
   appearanceBaseCtx.fillStyle = sat;
   appearanceBaseCtx.fillRect(p.x, p.y, p.w, p.h);
+  appearanceBaseItem = appearanceItem;
+  appearanceBasePart = appearancePart;
 }
 
 function drawAppearance(force = false) {
-  const now = performance.now();
-  const appearanceLastDraw = getAppearanceItem(); // This is a proxy; we'll use a different approach
-  // For now, skip the performance check and redraw
   const appearanceItem = getAppearanceItem();
   const appearancePart = getAppearancePart();
+  // The base (dark background, header, part row, picker gradient) was never
+  // drawn in the refactored version, so only the sliders showed -- exactly
+  // the cropped-looking panel in the screenshot, with the picker circle
+  // floating over the stars. Restore the base draw when item/part changes.
+  if (appearanceBaseItem !== appearanceItem || appearanceBasePart !== appearancePart) drawAppearanceBase();
   const item = AP_ITEMS[appearanceItem];
   const appearance = getAppearance();
   const t = appearance[apKey()];
