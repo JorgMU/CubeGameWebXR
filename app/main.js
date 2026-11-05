@@ -8,7 +8,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // Import build timestamp (calculated dynamically from file modification dates)
 
 // Import configuration
-import { GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, BOARD_COLOR, BOARD_OPACITY, CUBE_FACE_COLOR, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
+import { GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, BOARD_COLOR, BOARD_OPACITY, BOARD_ICON_OPACITY, CUBE_FACE_COLOR, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
 
 // Import utilities
 import { cellToLocal, keyOf, hsvCss, cssToHsv, apClamp01, formatTime, triggerHaptic, setHapticGamepad } from './utils.js';
@@ -356,6 +356,7 @@ function buildIconsFromPattern() {
     worldGroup.add(mesh);
     addIcon(keyOf(cell.col, cell.row), { colorIndex: cell.colorIndex, mesh });
   }
+  applyBoardIconOpacity();
   setRemaining(pattern.length);
 }
 
@@ -746,8 +747,8 @@ window.addEventListener('keydown', (e) => {
   else if (k === '0') {
     if (renderer.xr.isPresenting) { resetWorldForMR(); return; }
     worldGroup.position.copy(HOMES.desktop.position);
-    worldGroup.quaternion.identity();
-    setTiltDeg(0);
+    worldGroup.quaternion.copy(homeQuat(HOMES.desktop));
+    setTiltDeg(HOMES.desktop.tilt);
     worldGroup.scale.setScalar(HOMES.desktop.scale);
   }
 });
@@ -794,6 +795,15 @@ function resetWorldForMR() {
   worldGroup.quaternion.copy(homeQuat(home));
   setTiltDeg(home.tilt);
   worldGroup.scale.setScalar(home.scale);
+}
+// 2D start: apply the desktop home pose. initScene() sets the position
+// and scale, but not the tilt — without this the board would start flat
+// even though HOMES.desktop.tilt is 20, and the first T press would
+// jump from 0. MR is unaffected: sessionstart calls resetWorldForMR()
+// with the MR home.
+if (!renderer.xr.isPresenting) {
+  worldGroup.quaternion.copy(homeQuat(HOMES.desktop));
+  setTiltDeg(HOMES.desktop.tilt);
 }
 renderer.xr.addEventListener('sessionstart', () => {
   unlockAudio();
@@ -1009,6 +1019,10 @@ const APPEARANCE_BUTTON = 5; // B on the right Touch controller
 const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const AP_ITEMS = [
   { id: 'board', label: 'Board', parts: [{ id: '', label: 'Surface' }], alpha: true },
+  // Board icons have no colour of their own — each shape's colour comes
+  // from its Fill item — so this item is opacity-only: no picker, no
+  // brightness slider (see drawAppearance/drawAppearanceBase).
+  { id: 'boardIcons', label: 'Board icons', parts: [{ id: '', label: 'Icons' }], alpha: true, opacityOnly: true },
   { id: 'cube', label: 'Cube faces', parts: [{ id: '', label: 'Face colour' }], alpha: true },
   { id: 'grid', label: 'Grid lines', parts: [{ id: '', label: 'Lines' }] },
   { id: 'edges', label: 'Cube edges', parts: [{ id: '', label: 'Edges' }] },
@@ -1022,6 +1036,7 @@ const AP_ITEMS = [
 
 const appearance = {
   board: { ...cssToHsv(BOARD_COLOR), a: BOARD_OPACITY },
+  boardIcons: { h: 0, s: 0, v: 1, a: BOARD_ICON_OPACITY },
   cube: { ...cssToHsv(CUBE_FACE_COLOR), a: CUBE_OPACITY },
   grid: { ...cssToHsv(`#${GRID_COLOR.toString(16).padStart(6, '0')}`), a: 1 },
   edges: { ...cssToHsv(CUBE_EDGE_COLOR), a: 1 },
@@ -1064,6 +1079,10 @@ function applyBoardAppearance() {
   const b = appearance.board;
   boardPlane.material.color.set(hsvCss(b.h, b.s, b.v));
   boardPlane.material.opacity = b.a;
+}
+function applyBoardIconOpacity() {
+  const a = getAppearance().boardIcons.a;
+  for (const entry of getIcons().values()) entry.mesh.material.opacity = a;
 }
 function applyLineColors() {
   const appearance = getAppearance();
@@ -1132,9 +1151,10 @@ function updateColorTable() {
   const hex = (t) => hsvCss(t.h, t.s, t.v);
   const rows = ['Item           Color    Opacity Border'];
   for (const [key, t] of Object.entries(appearance)) {
-    const alpha = key === 'board' || key === 'cube' ? `${Math.round(t.a * 100)}%` : '-';
+    const alpha = key === 'board' || key === 'cube' || key === 'boardIcons' ? `${Math.round(t.a * 100)}%` : '-';
     const width = isBorderKey(key) ? `${Math.round(t.w)}px` : '-';
-    rows.push(`${key.padEnd(14)} ${hex(t)} ${alpha.padEnd(7)} ${width}`);
+    const color = key === 'boardIcons' ? '-' : hex(t);
+    rows.push(`${key.padEnd(14)} ${color} ${alpha.padEnd(7)} ${width}`);
   }
   hudColors.textContent = rows.join('\n');
   hudColors.style.display = debugVisible ? 'block' : 'none';
@@ -1220,6 +1240,7 @@ function drawAppearanceBase() {
     appearanceBaseCtx.font = 'bold 36px system-ui, sans-serif';
     appearanceBaseCtx.fillText(part.label, x + partW / 2, AP_PARTS.y + 36);
   });
+  if (item.opacityOnly) { appearanceBaseItem = appearanceItem; appearanceBasePart = appearancePart; return; }
   const p = AP_PICKER;
   const hue = appearanceBaseCtx.createLinearGradient(p.x, 0, p.x + p.w, 0);
   for (let i = 0; i <= 6; i++) hue.addColorStop(i / 6, `hsl(${i * 60}, 100%, 50%)`);
@@ -1248,19 +1269,21 @@ function drawAppearance(force = false) {
   const p = AP_PICKER;
   apCtx.clearRect(0, 0, AP_W, AP_H);
   apCtx.drawImage(appearanceBaseCanvas, 0, 0);
-  apCtx.strokeStyle = '#ffffff';
-  apCtx.lineWidth = 4;
-  apCtx.beginPath();
-  apCtx.arc(p.x + (t.h / 360) * p.w, p.y + (1 - t.s) * p.h, 12, 0, Math.PI * 2);
-  apCtx.stroke();
-  apCtx.strokeStyle = '#000000';
-  apCtx.lineWidth = 2;
-  apCtx.stroke();
-  const bright = apCtx.createLinearGradient(AP_BRIGHT.x, 0, AP_BRIGHT.x + AP_BRIGHT.w, 0);
-  bright.addColorStop(0, '#000000');
-  bright.addColorStop(1, hsvCss(t.h, t.s, 1));
-  drawSlider(AP_BRIGHT, `Brightness ${Math.round(t.v * 100)}%`, t.v, bright);
-  if (item.alpha) drawSlider(AP_OPACITY, `Opacity ${Math.round(t.a * 100)}%`, t.a, hsvCss(t.h, t.s, t.v));
+  if (!item.opacityOnly) {
+    apCtx.strokeStyle = '#ffffff';
+    apCtx.lineWidth = 4;
+    apCtx.beginPath();
+    apCtx.arc(p.x + (t.h / 360) * p.w, p.y + (1 - t.s) * p.h, 12, 0, Math.PI * 2);
+    apCtx.stroke();
+    apCtx.strokeStyle = '#000000';
+    apCtx.lineWidth = 2;
+    apCtx.stroke();
+    const bright = apCtx.createLinearGradient(AP_BRIGHT.x, 0, AP_BRIGHT.x + AP_BRIGHT.w, 0);
+    bright.addColorStop(0, '#000000');
+    bright.addColorStop(1, hsvCss(t.h, t.s, 1));
+    drawSlider(AP_BRIGHT, `Brightness ${Math.round(t.v * 100)}%`, t.v, bright);
+  }
+  if (item.alpha) drawSlider(AP_OPACITY, `Opacity ${Math.round(t.a * 100)}%`, t.a, item.opacityOnly ? '#404050' : hsvCss(t.h, t.s, t.v));
   if (isBorderKey(apKey())) drawSlider(AP_OPACITY, `Border width ${Math.round(t.w)}`, t.w / BORDER_WIDTH_MAX, '#404050');
   appearanceTexture.needsUpdate = true;
 }
@@ -1308,6 +1331,7 @@ function applyAppearanceDrag(px, py) {
   const lastHapticAt = getLastHapticAt();
   if (now - lastHapticAt > 80) { setLastHapticAt(now); triggerHaptic(0.1, 15, 'left'); }
   if (key === 'board') applyBoardAppearance();
+  else if (key === 'boardIcons') applyBoardIconOpacity();
   else if (key === 'cube') {
     applyCubeOpacity();
     if (appearanceDrag !== 'opacity') setCubeColorDirty(true);
@@ -1372,8 +1396,8 @@ function updateAppearance(triggerHeld, rightStick) {
     } else if (hit.y >= AP_PARTS.y && hit.y <= AP_PARTS.y + AP_PARTS.h) {
       const part = Math.min(item.parts.length - 1, Math.max(0, Math.floor((hit.x - 10) / ((AP_W - 20) / item.parts.length))));
       if (part !== getAppearancePart()) { flushAppearance(); setAppearancePart(part); drawAppearance(true); }
-    } else if (inRect(AP_PICKER, 0)) setAppearanceDrag('picker');
-    else if (inRect(AP_BRIGHT, 14)) setAppearanceDrag('bright');
+    } else if (!item.opacityOnly && inRect(AP_PICKER, 0)) setAppearanceDrag('picker');
+    else if (!item.opacityOnly && inRect(AP_BRIGHT, 14)) setAppearanceDrag('bright');
     else if ((item.alpha || isBorderKey(apKey())) && inRect(AP_OPACITY, 14)) setAppearanceDrag('opacity');
   }
   const appearanceDrag = getAppearanceDrag();

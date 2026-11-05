@@ -15,6 +15,28 @@ export function initScene() {
 
   // MR Button
   const mrButton = ARButton.createButton(renderer);
+  // Glowy green border and text, like a bright computer display,
+  // two-tone like the 2D buttons (see index.html): dark green at
+  // rest, bright green + glow on hover. Size is left to three.js:
+  // ARButton sets width/left itself (100 px for START MR, 150 px
+  // for MR NOT SUPPORTED) and resets them when the support check
+  // resolves, so overriding those was fighting it — v18 did, and it
+  // is reverted here. Only padding, border and colours are
+  // overridden, once: three.js sets those in stylizeElement() at
+  // creation and never touches them again, so this sticks without
+  // any re-applying. Padding is a bit less than three.js's
+  // 12px 6px: 8px 6px. The hover half lives in index.html
+  // (#ARButton:hover) because the rest colours are inline styles.
+  // Note the rest state is dark green AND at three.js's 0.5 opacity
+  // until hover, so it reads dimmer than the 2D buttons at rest;
+  // on hover three.js raises opacity to 1.0 and the bright green +
+  // glow show exactly as on the 2D buttons.
+  mrButton.style.padding = '8px 6px';
+  mrButton.style.border = '1px solid #007a33';
+  mrButton.style.color = '#007a33';
+  mrButton.style.background = 'rgba(0,0,0,0.35)';
+  mrButton.style.textShadow = 'none';
+  mrButton.style.boxShadow = 'none';
   new MutationObserver(() => {
     const text = mrButton.textContent.replace(/\bAR\b/, 'MR');
     if (text !== mrButton.textContent) mrButton.textContent = text;

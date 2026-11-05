@@ -20,11 +20,35 @@
   #records table { border-collapse: collapse; width: 100%; text-align: left; }
   #records th, #records td { padding: 2px 4px; }
   #records th { color: #ffd166; }
-  #hud button {
-    margin: 6px 6px 0 0; padding: 6px 10px; border-radius: 6px; border: 0;
-    background: #3498db; color: #fff; cursor: pointer; font-size: 14px;
+  #hudButtons {
+    position: absolute; top: 12px; right: 12px; z-index: 10;
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end;
+    max-width: 60%;
   }
-  #hud button:hover { background: #2980b9; }
+  /* Glowy green, like a bright computer display (same family as the
+     Start MR button, see scene.js), but two-tone: dark green at rest,
+     bright green on hover. No opacity fade — the old 0.5 fade is what
+     washed the green out to a bland grey. */
+  #hudButtons button {
+    padding: 8px 6px; border: 1px solid #007a33; border-radius: 4px;
+    background: rgba(0,0,0,0.35); color: #007a33; cursor: pointer;
+    font: normal 13px sans-serif; text-align: center; outline: none;
+  }
+  #hudButtons button:hover {
+    border-color: #00ff66; color: #00ff66;
+    text-shadow: 0 0 6px rgba(0,255,102,0.9);
+    box-shadow: 0 0 8px rgba(0,255,102,0.7), 0 0 18px rgba(0,255,102,0.35);
+  }
+  /* The MR button's hover glow. Three.js owns its opacity fade and
+     its base colours are set inline in scene.js, so the hover
+     colours need !important to win over them. Three.js also raises
+     the opacity to 1.0 on hover itself, so the glow shows at full
+     strength — same as the 2D buttons above. */
+  #ARButton:hover {
+    border-color: #00ff66 !important; color: #00ff66 !important;
+    text-shadow: 0 0 6px rgba(0,255,102,0.9) !important;
+    box-shadow: 0 0 8px rgba(0,255,102,0.7), 0 0 18px rgba(0,255,102,0.35) !important;
+  }
   #help { font-size: 12px; opacity: 0.85; margin-top: 6px; }
 </style>
 <script type="importmap">
@@ -37,17 +61,19 @@
 </script>
 </head>
 <body>
+<div id="hudButtons">
+  <button id="btnNext">Next level (N)</button>
+  <button id="btnRestart">Restart level (R)</button>
+  <button id="btnDebug">Debug (P)</button>
+  <button id="btnClearScores">Clear scores (C)</button>
+  <button id="btnForceRefresh">Force refresh</button>
+</div>
 <div id="hud">
   <div>Level: <b id="hudLevel">1</b> &nbsp; Remaining: <b id="hudRemaining">–</b></div>
   <div>Time: <b id="hudTime">Ready</b> &nbsp; Score: <b id="hudScore">0</b></div>
   <div>Face down: <b id="hudDown">–</b></div>
   <div id="hudMessage">Roll the cube onto a matching flat icon.</div>
   <div id="hudBuildTimestamp"></div>
-  <button id="btnNext">Next level (N)</button>
-  <button id="btnRestart">Restart level (R)</button>
-  <button id="btnDebug">Debug (P)</button>
-  <button id="btnClearScores">Clear scores (C)</button>
-  <button id="btnForceRefresh">Force refresh</button>
   <details id="records">
     <summary>Session scores (top 10)</summary>
     <table>
@@ -61,7 +87,7 @@
     Quest: thumbstick rolls one square. Hold <b>one grip</b> to drag the world, or <b>both grips</b> to also rotate and scale:
     twist hands to rotate (yaw), move hands apart/together to scale. Press <b>B button</b> (right hand) to open the color picker.<br />
     Desktop: arrow keys / WASD roll, Ctrl+Arrow move world, Q/E rotate world,
-    +/-/wheel scale world, 0 reset world, N next, R restart, P toggle debug info, T tilt board up, Shift+T tilt down, H hide/show this panel, C clear scores.<br />
+    +/-/wheel scale world, 0 reset world, N next, R restart, P toggle debug info, T tilt board up, Shift+T tilt down, H hide/show this panel (the buttons at the top right stay visible), C clear scores.<br />
     The clock starts on your first move. Each match is worth 180 points minus one point per elapsed second (minimum 0). The top 10 completed levels are kept across sessions (saved in your browser, like the colours), and shown in the table above and on the scores panel beside the board. C, or the Clear scores button, wipes them.<br />
     In MR after a win, pull a trigger to start the next level.
   </div>
