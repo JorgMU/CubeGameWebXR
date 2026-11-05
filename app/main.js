@@ -8,7 +8,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // Import build timestamp (calculated dynamically from file modification dates)
 
 // Import configuration
-import { GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, BOARD_COLOR, BOARD_OPACITY, BOARD_ICON_OPACITY, CUBE_FACE_COLOR, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
+import { GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, BOARD_COLOR, BOARD_OPACITY, BOARD_ICON_OPACITY, CUBE_FACE_COLOR, CUBE_ICON_OPACITY, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
 
 // Import utilities
 import { cellToLocal, keyOf, hsvCss, cssToHsv, apClamp01, formatTime, triggerHaptic, setHapticGamepad } from './utils.js';
@@ -67,7 +67,7 @@ import {
 import { initScene, getRenderer, getScene, getCamera, getWorldGroup, xrGetSession, xrIsPresenting } from './scene.js';
 import { initShapeStyles, shapeStyles, drawIcon, makeIconTexture, redrawIconTexture, createIconTextures, createCubeIconTextures } from './textures.js';
 // (board/grid/panel materials are created inline in main.js, as in the pre-refactor version)
-import { initCube, getCube, getCubeMaterials, getCubeFaceColorIndices } from './cube.js';
+import { initCube, getCube, getCubeMaterials, getCubeShapeMaterials, getCubeFaceColorIndices } from './cube.js';
 
 // ---------------------------------------------------------------------------
 // Cube Game WebXR — v5, 11x11 board
@@ -1024,6 +1024,7 @@ const AP_ITEMS = [
   // brightness slider (see drawAppearance/drawAppearanceBase).
   { id: 'boardIcons', label: 'Board icons', parts: [{ id: '', label: 'Icons' }], alpha: true, opacityOnly: true },
   { id: 'cube', label: 'Cube faces', parts: [{ id: '', label: 'Face colour' }], alpha: true },
+  { id: 'cubeIcons', label: 'Cube icons', parts: [{ id: '', label: 'Icons' }], alpha: true, opacityOnly: true },
   { id: 'grid', label: 'Grid lines', parts: [{ id: '', label: 'Lines' }] },
   { id: 'edges', label: 'Cube edges', parts: [{ id: '', label: 'Edges' }] },
   { id: 'shapeBorder', label: 'Shape borders', parts: [{ id: '', label: 'All shapes' }] },
@@ -1038,6 +1039,7 @@ const appearance = {
   board: { ...cssToHsv(BOARD_COLOR), a: BOARD_OPACITY },
   boardIcons: { h: 0, s: 0, v: 1, a: BOARD_ICON_OPACITY },
   cube: { ...cssToHsv(CUBE_FACE_COLOR), a: CUBE_OPACITY },
+  cubeIcons: { h: 0, s: 0, v: 1, a: CUBE_ICON_OPACITY },
   grid: { ...cssToHsv(`#${GRID_COLOR.toString(16).padStart(6, '0')}`), a: 1 },
   edges: { ...cssToHsv(CUBE_EDGE_COLOR), a: 1 },
 };
@@ -1063,6 +1065,10 @@ try {
       Object.assign(appearance[key], saved[key]);
     }
   }
+  // Saves from before the split have no cubeIcons entry, and their shapes
+  // rendered at the face opacity — keep that as the shape opacity rather
+  // than the fresh default, so the cube looks the same as before.
+  if (!saved || !saved.cubeIcons) appearance.cubeIcons.a = appearance.cube.a;
   if (!Number.isFinite(appearance.shapeBorder.w)) appearance.shapeBorder.w = SHAPE_BORDER_WIDTH;
 } catch { /* ignore bad or unavailable storage */ }
 setAppearance(appearance);
@@ -1087,7 +1093,17 @@ function applyBoardIconOpacity() {
 function applyLineColors() {
   const appearance = getAppearance();
   const g = appearance.grid, e = appearance.edges;
-  grid.material.color.set(hsvCss(g.h, g.s, g.v));
+  // GridHelper bakes its colours into the geometry's vertex colours and
+  // its material colour only multiplies them — so setting material.color
+  // alone did nothing while the baked colour was black (black x green
+  // is still black). That is why a grid colour change showed in the
+  // debug table but the lines stayed black. Update the vertex colours
+  // themselves, and reset material.color to white so they show true.
+  const c = new THREE.Color(hsvCss(g.h, g.s, g.v));
+  const colors = grid.geometry.attributes.color;
+  for (let i = 0; i < colors.count; i++) colors.setXYZ(i, c.r, c.g, c.b);
+  colors.needsUpdate = true;
+  grid.material.color.set(0xffffff);
   cubeEdgeMaterial.color.set(hsvCss(e.h, e.s, e.v));
 }
 function applyShapeStyles() {
@@ -1118,21 +1134,32 @@ function applyCubeOpacity() {
     mat.depthWrite = a >= 1;
     mat.needsUpdate = true;
   });
+  // Shapes keep their own opacity; only their side follows the face mode
+  // (DoubleSide while transparent so far shapes show through, FrontSide
+  // when solid so they are culled with the faces).
+  getCubeShapeMaterials().forEach((mat) => {
+    mat.side = a < 1 ? THREE.DoubleSide : THREE.FrontSide;
+    mat.needsUpdate = true;
+  });
+}
+function applyCubeShapeOpacity() {
+  const a = getAppearance().cubeIcons.a;
+  getCubeShapeMaterials().forEach((mat) => { mat.opacity = a; mat.needsUpdate = true; });
 }
 function rebuildCubeFaces() {
   const appearance = getAppearance();
-  // One background colour for all faces (appearance.cube, "Cube faces"),
-  // and each shape drawn in its own colour — the same as the board icons.
-  // Fixed8 had this backwards (per-face background, white shape); that is
-  // what made the faces coloured and the shapes grey.
+  // Face backgrounds are plain colours now (no map); the shapes live on
+  // their own planes just outside the faces (see cube.js), so the two
+  // opacities are independent. A background-colour change only re-tints
+  // the face materials; only a shape-colour change redraws a shape
+  // texture — and it is redrawn without a background, so the face
+  // colour shows through it.
   const bg = hsvCss(appearance.cube.h, appearance.cube.s, appearance.cube.v);
-  const cubeMaterials = getCubeMaterials();
-  const dirtyShapes = getDirtyShapes();
+  getCubeMaterials().forEach((mat) => mat.color.set(bg));
   const dirtyCubeShapes = getDirtyCubeShapes();
-  const cubeColorDirty = getCubeColorDirty();
-  cubeMaterials.forEach((mat, i) => {
+  getCubeShapeMaterials().forEach((mat, i) => {
     const shape = COLORS[getCubeFaceColorIndices()[i]].shape;
-    if (cubeColorDirty || dirtyCubeShapes.has(shape)) redrawIconTexture(mat.map, shape, bg);
+    if (dirtyCubeShapes.has(shape)) redrawIconTexture(mat.map, shape);
   });
   applyCubeOpacity();
   setCubeColorDirty(false);
@@ -1151,9 +1178,9 @@ function updateColorTable() {
   const hex = (t) => hsvCss(t.h, t.s, t.v);
   const rows = ['Item           Color    Opacity Border'];
   for (const [key, t] of Object.entries(appearance)) {
-    const alpha = key === 'board' || key === 'cube' || key === 'boardIcons' ? `${Math.round(t.a * 100)}%` : '-';
+    const alpha = key === 'board' || key === 'cube' || key === 'boardIcons' || key === 'cubeIcons' ? `${Math.round(t.a * 100)}%` : '-';
     const width = isBorderKey(key) ? `${Math.round(t.w)}px` : '-';
-    const color = key === 'boardIcons' ? '-' : hex(t);
+    const color = key === 'boardIcons' || key === 'cubeIcons' ? '-' : hex(t);
     rows.push(`${key.padEnd(14)} ${color} ${alpha.padEnd(7)} ${width}`);
   }
   hudColors.textContent = rows.join('\n');
@@ -1167,6 +1194,7 @@ function saveAppearance() {
 const hudColors = document.getElementById('hudColors');
 applyShapeStyles();
 applyBoardAppearance();
+applyCubeShapeOpacity(); // migrated saves may carry a different shape opacity than the fresh default
 applyLineColors();
 for (const col of COLORS) addDirtyShape(col.shape);
 setCubeColorDirty(true);
@@ -1336,6 +1364,7 @@ function applyAppearanceDrag(px, py) {
     applyCubeOpacity();
     if (appearanceDrag !== 'opacity') setCubeColorDirty(true);
   }
+  else if (key === 'cubeIcons') applyCubeShapeOpacity();
   else if (key === 'grid' || key === 'edges') applyLineColors();
   else {
     applyShapeStyles();

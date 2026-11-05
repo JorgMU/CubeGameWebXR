@@ -43,6 +43,7 @@ export const GRID_COLOR = 0x000000; // black — user's colour choice (Nov 5, 20
 // purple and orange all pop on it.
 export const CUBE_FACE_COLOR = '#222222';
 export const CUBE_OPACITY = 0.6;
+export const CUBE_ICON_OPACITY = CUBE_OPACITY; // cube shapes: default = the face opacity, so the cube looks exactly as before until the slider moves
 export const CUBE_EDGE_COLOR = '#055200';
 export const SHAPE_BORDER_COLOR = '#000000';
 export const SHAPE_BORDER_WIDTH = 4; // px on the 256 px icon texture

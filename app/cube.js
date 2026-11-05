@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { CUBE, INITIAL_ORIENTATION, CUBE_OPACITY } from './config.js';
 import { cellToLocal } from './utils.js';
-import { createCubeMaterials, createCubeEdgeMaterial } from './materials.js';
+import { createCubeMaterials, createCubeShapeMaterials, createCubeEdgeMaterial } from './materials.js';
 
 let cube;
 let cubeMaterials;
+let cubeShapeMaterials;
 let cubeFaceColorIndices;
 
 export function initCube(iconTextures) {
@@ -13,7 +14,8 @@ export function initCube(iconTextures) {
     INITIAL_ORIENTATION.down, INITIAL_ORIENTATION.south, INITIAL_ORIENTATION.north,
   ];
 
-  cubeMaterials = createCubeMaterials(iconTextures, cubeFaceColorIndices);
+  cubeMaterials = createCubeMaterials();
+  cubeShapeMaterials = createCubeShapeMaterials(iconTextures, cubeFaceColorIndices);
   // Six separate planes, one per face, in a group — NOT one BoxGeometry.
   // A BoxGeometry draws its six faces in a fixed material order, never
   // sorted by distance, so with a transparent cube the back face (drawn
@@ -37,11 +39,20 @@ export function initCube(iconTextures) {
     { pos: [0, 0, -h], rot: [0, Math.PI, 0] },      // north (-z)
   ];
   cube = new THREE.Group();
+  const shapeEps = 0.0015; // shape plane sits just outside its face, so it
+  // draws over the face without z-fighting. The face position already
+  // lies along its own normal, so scaling it out a little moves the
+  // plane straight outwards.
   faces.forEach((face, i) => {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(CUBE, CUBE), cubeMaterials[i]);
     mesh.position.set(face.pos[0], face.pos[1], face.pos[2]);
     mesh.rotation.set(face.rot[0], face.rot[1], face.rot[2]);
     cube.add(mesh);
+    const shapeMesh = new THREE.Mesh(new THREE.PlaneGeometry(CUBE, CUBE), cubeShapeMaterials[i]);
+    const so = (h + shapeEps) / h;
+    shapeMesh.position.set(face.pos[0] * so, face.pos[1] * so, face.pos[2] * so);
+    shapeMesh.rotation.set(face.rot[0], face.rot[1], face.rot[2]);
+    cube.add(shapeMesh);
   });
 
   const cubeEdgeMaterial = createCubeEdgeMaterial();
@@ -56,6 +67,10 @@ export function getCube() {
 
 export function getCubeMaterials() {
   return cubeMaterials;
+}
+
+export function getCubeShapeMaterials() {
+  return cubeShapeMaterials;
 }
 
 export function getCubeFaceColorIndices() {
@@ -96,6 +111,11 @@ export function setCubeMaterialOpacity(opacity) {
     // opaque = FrontSide, depth write (solid cube, back faces culled).
     mat.side = opacity < 1 ? THREE.DoubleSide : THREE.FrontSide;
     mat.depthWrite = opacity >= 1;
+    mat.needsUpdate = true;
+  });
+  // Shapes keep their own opacity; only their side follows the face mode.
+  cubeShapeMaterials.forEach((mat) => {
+    mat.side = opacity < 1 ? THREE.DoubleSide : THREE.FrontSide;
     mat.needsUpdate = true;
   });
 }
