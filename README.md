@@ -230,6 +230,31 @@ py -m http.server 8001 --directory app
 Then open `http://localhost:8001` on desktop for logic testing. For the
 Quest, you still need an HTTPS URL (see Option A).
 
+## Forcing a refresh after changing a file
+
+The HUD shows the build time as the newest Last-Modified among the
+served files — that is how you tell the latest changes loaded. Three
+things make a changed file actually show up:
+
+- **The server sends `Cache-Control: no-store`.** `StartCubeGameWebXR.ps1`
+  runs `CubeGameWebXRServer.py` (repo root, not served) instead of plain
+  `py -m http.server`, which sends no Cache-Control and let browsers and
+  the tunnel cache files by Last-Modified heuristics. With no-store,
+  every load goes to disk, so a normal reload or a new tab works.
+- **The loader re-reads every file from the server.** The inline loader
+  in `app/index.html` fetches all 9 served files with `cache: 'reload'`
+  (true Last-Modified, and the fresh copies are put in the cache, so
+  `main.js`'s imports load fresh too), then loads
+  `main.js?v=<newest Last-Modified>`. There is no `location.reload()` in
+  the loader any more — the old one could read a cached timestamp, reload,
+  read the cached timestamp again, and settle on the old files.
+- **Force refresh, by hand.** The **Force refresh** button in the top-left
+  HUD (2D only) reloads the page with `?fresh=<timestamp>`, which loads
+  `main.js` with a unique, never-cached version string. You can also paste
+  the tunnel URL with `?fresh=1` added yourself. The displayed build time
+  is still the newest Last-Modified, not "now" — forcing a refresh only
+  forces the files to load, it does not change what the time means.
+
 ## Debug readout
 
 Small grey text, shown in the HTML HUD (top-left, desktop) and in the world

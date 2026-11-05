@@ -1,22 +1,24 @@
-# Thul Changes — fixed14 (2026-11-05)
+# Thul Changes — v16 (2026-11-05)
 
-Based on fixed13. Only `app/main.js`, `app/index.html`, and
-`README.md` change (plus this note).
+Based on fixed15. Only `app/main.js` changes (plus this note).
 
-## HUD toggle key: Space → H
+## Debug panel moved: south edge → east edge
 
-Space is the standard key for activating the control that currently
-has focus, so using it to hide/show the HUD panel was surprising:
-Tab to a button, press Space expecting a click, and the panel
-disappeared instead. (The fixed12 version did `preventDefault()` so
-it would not also click, but the expectation was still wrong.)
+The in-world debug readout (small grey text, P / Debug button) was
+lying flat just beyond the **south** edge of the board, in front of
+the player below the board. It is now just beyond the **east** edge
+instead:
 
-- `app/main.js`: **H** now hides/shows the top-left HUD panel in
-  2D mode. H again brings it back. Space no longer toggles the panel
-  at all, so it is free for its standard job, and Enter still
-  activates a focused button as well.
-- `app/index.html` and `README.md`: the help text and the desktop
-  controls list now say "H hide/show this panel".
+- `app/main.js`: `debugPanel.position` changed from
+  `(0, 0.012, BOARD_SIZE / 2 + debugPanelHeight / 2 + 0.05)` to
+  `(BOARD_SIZE / 2 + 1.8 / 2 + 0.05, 0.012, 0)` — east of the board,
+  centred north-south, with the same small 0.05 m gap.
+- Orientation is unchanged: the panel still lies flat, long side
+  east-west, text top to the north, so it reads the same way from the
+  south as it did before. It is just no longer in front of the player.
+- The scores panel stays where it was, on the west side, so the two
+  side panels are now balanced: scores west, debug east. The status
+  panel stays on the north edge.
 
-No other key changes. The game itself keeps running while the panel
-is hidden; only the panel is affected.
+The 2D HUD debug readout (`#hudDebug`, top-left panel) is unchanged
+— this is only the in-world panel.

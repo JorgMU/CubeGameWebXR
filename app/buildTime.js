@@ -23,6 +23,7 @@ async function getFileModifiedTime(filePath) {
     const response = await fetch(filePath, {
       method: 'GET',
       headers: { 'Range': 'bytes=0-0' },
+      cache: 'reload', // never read Last-Modified from a cached copy, and prime the cache with the fresh file
     });
     const lastModified = response.headers.get('Last-Modified');
     if (lastModified) return new Date(lastModified);

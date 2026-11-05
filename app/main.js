@@ -235,8 +235,12 @@ const debugPanel = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ map: debugTexture, transparent: true, side: THREE.DoubleSide })
 );
 debugPanel.rotation.x = -Math.PI / 2;
-// Just beyond the south edge of the board, with a small gap.
-debugPanel.position.set(0, 0.012, BOARD_SIZE / 2 + debugPanelHeight / 2 + 0.05);
+// East of the board, centred north-south, with a small gap. Orientation
+// is unchanged (long side east-west, text top to the north), so it reads
+// the same way from the south as it did on the south edge — it is just
+// no longer in front of the player, below the board. Was:
+// position.set(0, 0.012, BOARD_SIZE / 2 + debugPanelHeight / 2 + 0.05)
+debugPanel.position.set(BOARD_SIZE / 2 + 1.8 / 2 + 0.05, 0.012, 0);
 worldGroup.add(debugPanel);
 
 // --- Session scores (flat in the board plane, left of the board) ---------------
@@ -758,6 +762,7 @@ document.getElementById('btnNext').addEventListener('click', nextLevel);
 document.getElementById('btnRestart').addEventListener('click', restartLevel);
 document.getElementById('btnDebug').addEventListener('click', () => { setDebugVisible(!getDebugVisible()); updateDebug(); updateColorTable(); });
 document.getElementById('btnClearScores').addEventListener('click', clearScores);
+document.getElementById('btnForceRefresh').addEventListener('click', () => { const url = new URL(location.href); url.searchParams.set('fresh', String(Date.now())); location.href = url.toString(); });
 
 // --- XR controllers: thumbstick roll + two-grip world drag ---------------------
 const controller0 = renderer.xr.getController(0);

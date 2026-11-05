@@ -47,6 +47,7 @@
   <button id="btnRestart">Restart level (R)</button>
   <button id="btnDebug">Debug (P)</button>
   <button id="btnClearScores">Clear scores (C)</button>
+  <button id="btnForceRefresh">Force refresh</button>
   <details id="records">
     <summary>Session scores (top 10)</summary>
     <table>
@@ -67,17 +68,34 @@
 </div>
 <canvas id="renderCanvas"></canvas>
 <script>
-  // Pre-load check: work out the newest Last-Modified among all served files,
-  // reload once if it changed since the last load, then load main.js with that
-  // timestamp as a cache-buster. If no file supplies Last-Modified, load
-  // main.js plainly and do NOT reload -- falling back to "now" here would
-  // reload in a loop, because "now" always differs.
+  // Pre-load check: work out the newest Last-Modified among all served
+  // files, then load main.js with that timestamp as a cache-buster. The
+  // displayed build time stays that newest Last-Modified (see buildTime.js).
+  //
+  // Why the old loader could not force a refresh, even with Ctrl+F5 or a
+  // new tab:
+  //  1. Its fetches used the browser's default cache, so the Last-Modified
+  //     it read could be the cached copy's — it never saw the change, so
+  //     it never reloaded, and it loaded main.js?v=<old timestamp>.
+  //  2. Only main.js was cache-busted. Its 8 imports (config.js, state.js,
+  //     cube.js, ...) are loaded by the module loader with no query string,
+  //     so they could still come from cache even when main.js was fresh.
+  //  3. When it did see a change it did location.reload() and returned
+  //     without loading anything. On the reload the fetches could again
+  //     come back cached (old), which wrote the old timestamp back into
+  //     sessionStorage and settled on the old files.
+  // Fixes: every fetch below uses cache:'reload' — the browser goes to the
+  // server, reads the true Last-Modified, AND updates its cache with the
+  // fresh copy, so main.js's imports then load fresh too. There is no
+  // location.reload() at all. And ?fresh=<anything> in the URL (or the
+  // Force refresh button) loads main.js with a unique, never-cached
+  // version string, for when you want to force it by hand.
   const FILES_TO_CHECK = ['./index.html', './main.js', './config.js', './state.js', './cube.js', './materials.js', './scene.js', './textures.js', './utils.js'];
   async function calculateBuildTimestamp() {
     const timestamps = [];
     for (const file of FILES_TO_CHECK) {
       try {
-        const response = await fetch(file, { method: 'GET', headers: { 'Range': 'bytes=0-0' } });
+        const response = await fetch(file, { method: 'GET', headers: { 'Range': 'bytes=0-0' }, cache: 'reload' });
         const lastModified = response.headers.get('Last-Modified');
         if (lastModified) timestamps.push(new Date(lastModified));
       } catch (e) {}
@@ -93,22 +111,23 @@
     return `${y}-${m}-${d}@${h}:${min}:${sec}`;
   }
   async function initializeApp() {
+    const params = new URLSearchParams(location.search);
+    const forced = params.has('fresh');
     const currentTimestamp = await calculateBuildTimestamp();
     const script = document.createElement('script');
     script.type = 'module';
-    if (!currentTimestamp) {
+    if (!currentTimestamp && !forced) {
       script.src = './main.js';
       document.body.appendChild(script);
       return;
     }
-    const storedTimestamp = sessionStorage.getItem('buildTimestamp');
-    if (storedTimestamp && storedTimestamp !== currentTimestamp) {
-      sessionStorage.setItem('buildTimestamp', currentTimestamp);
-      location.reload();
-      return;
-    }
-    sessionStorage.setItem('buildTimestamp', currentTimestamp);
-    script.src = `./main.js?v=${currentTimestamp}`;
+    // Unique version when forced, so main.js itself can never come from
+    // cache; otherwise the newest Last-Modified, as before. The imports
+    // are fresh because the cache:'reload' fetches above just primed the
+    // cache with the latest copies of all of them.
+    const version = forced ? `fresh-${Date.now()}` : currentTimestamp;
+    if (currentTimestamp) sessionStorage.setItem('buildTimestamp', currentTimestamp);
+    script.src = `./main.js?v=${version}`;
     document.body.appendChild(script);
   }
   initializeApp();

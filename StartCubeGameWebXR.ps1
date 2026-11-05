@@ -68,8 +68,16 @@ if (Test-Path $cloudflaredErrorLogFile) {
     Remove-Item -Path $cloudflaredErrorLogFile -Force
 }
 
-$serverArgs = @('-m', 'http.server', $Port, '--bind', '127.0.0.1', '--directory', $appDir)
-$server = Start-Process -FilePath 'py' -ArgumentList $serverArgs -WorkingDirectory $appDir -WindowStyle Minimized -PassThru
+# Serves with CubeGameWebXRServer.py (repo root, not served) instead of plain
+# `py -m http.server`: it sends Cache-Control: no-store on every file, so a
+# changed file shows up on the next load instead of being served from the
+# browser's or the tunnel's cache. See that file for why.
+$serverScript = Join-Path $scriptRoot 'CubeGameWebXRServer.py'
+if (-not (Test-Path -Path $serverScript)) {
+    throw "Server script not found: $serverScript"
+}
+$serverArgs = @($serverScript, $Port, '127.0.0.1', $appDir)
+$server = Start-Process -FilePath 'py' -ArgumentList $serverArgs -WorkingDirectory $scriptRoot -WindowStyle Minimized -PassThru
 
 $tunnelUrl = "http://127.0.0.1:$Port"
 $tunnelArgs = @('tunnel', '--url', $tunnelUrl)
