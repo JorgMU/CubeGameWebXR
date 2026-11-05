@@ -1,17 +1,24 @@
 import * as THREE from 'three';
-import { CUBE_FACE_BLUE, CUBE_OPACITY, CUBE_EDGE_COLOR, BOARD_COLOR, BOARD_OPACITY, GRID_COLOR } from './config.js';
+import { CUBE_OPACITY, CUBE_EDGE_COLOR, BOARD_COLOR, BOARD_OPACITY, GRID_COLOR } from './config.js';
 import { makeIconTexture } from './textures.js';
 import { COLORS } from './config.js';
 
 // Cube materials
 export function createCubeFaceMaterial(colorIndex, iconTextures) {
+  // Transparent mode (opacity < 1, the user's case at 0.6): the far faces
+  // must be visible through the near faces, so the material is DoubleSide
+  // and does NOT write depth — depthTest stays on, so the board and other
+  // opaque objects still occlude the cube correctly. At opacity 1 the
+  // cube is opaque: FrontSide + depthWrite, as a solid cube. The mode is
+  // switched in applyCubeOpacity() / setCubeMaterialOpacity(); the
+  // per-face sorting that makes this work is in cube.js (six separate
+  // planes, not one BoxGeometry — see there).
   return new THREE.MeshStandardMaterial({
     map: iconTextures[colorIndex],
-    transparent: true,
+    transparent: CUBE_OPACITY < 1,
     opacity: CUBE_OPACITY,
-    depthWrite: true,
-    depthTest: false,
-    side: THREE.DoubleSide,
+    side: CUBE_OPACITY < 1 ? THREE.DoubleSide : THREE.FrontSide,
+    depthWrite: CUBE_OPACITY >= 1,
   });
 }
 

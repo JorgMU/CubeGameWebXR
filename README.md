@@ -4,13 +4,21 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 
 ## The game
 
-- A horizontal 11×11 board floats in front of you. It is a 34% opaque green
-  surface (`BOARD_COLOR`, `BOARD_OPACITY`) with yellow grid lines, so it tints the background behind it. The board footprint is still 2 m, so each cell is
-  about 0.182 m — to change the board size, change `BOARD_SIZE` in `main.js`,
+- A horizontal 11×11 board floats in front of you. It is a 34% opaque dark-blue
+  surface (`BOARD_COLOR` `#000584`, `BOARD_OPACITY`) with black grid lines
+  (`GRID_COLOR` `0x000000`), so it tints the background behind it. The board footprint is still 2 m, so each cell is
+  about 0.182 m — to change the board size, change `BOARD_SIZE` in `app/config.js`,
   not `CELL`, and the cells, cube, and icons will scale with it.
-- A cube has deep-blue faces at 63% opacity (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
-  shape and colour as the board icons). Default colours were captured from the appearance panel's colour table.
-  Red, Green, Blue, Yellow, Purple, Orange.
+- A cube has dark-grey faces (`CUBE_FACE_COLOR` `#222222`) at 60% opacity
+  (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
+  shape and colour as the board icons). Current colours, from the appearance
+  panel's colour table: board `#000584`, cube `#222222`, grid `#000000`,
+  edges `#055200`, circle `#c10303`, triangle `#049f27`, square `#354cff`,
+  star `#f1c40f`, diamond `#9b59b6`, hexagon `#e67e22`, shape border
+  `#000000` 4 px. Red, Green, Blue, Yellow, Purple, Orange.
+- The cube is transparent, and its six faces are separate planes, so the
+  shapes on the far faces show through the near faces, in the right order,
+  at partial opacity. At opacity 1.0 it is solid, and only three faces show.
 - Each coloured square shows a **flat icon lying in the plane of the board**
   (not floating above it). The icon's shape is also distinct per colour,
   so a square is not identified by colour alone.
@@ -19,8 +27,24 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 - The level ends when every coloured square is cleared.
 - A new level is a new random pattern: about 50% of squares coloured,
   the rest blank (the start square is always blank). Generation
-  guarantees at least 6 coloured squares. There is no timer and no lose
+  guarantees at least 6 coloured squares. There is no lose
   condition in the current version. Rolling off the edge is blocked.
+
+## Scores
+
+- The clock starts on your first move of a level. Each match is worth
+  180 points minus one point per elapsed second (minimum 0).
+- Completing a level adds a record (level, score, time, date) to the
+  top 10, shown in the HUD table ("Session scores") and on the scores
+  panel beside the board in the world.
+- The top 10 **persist across sessions**: they are saved in
+  `localStorage` under `cubeGameRecords` (like the appearance colours
+  under `cubeGameAppearance`), sorted by score, then by time, and
+  trimmed to 10. Bad or unavailable storage falls back to an empty list.
+- **Clear scores** (2D only): the **Clear scores (C)** button in the
+  top-left HUD, or the **C** key, wipes the saved top 10 immediately
+  (no undo) and restores the empty table. There is no clear control in
+  MR; clear from the 2D panel before or after a session.
 
 The cube starts at the center cell (column 5, row 5), on the center row.
 Its initial face orientation is: Blue up,
@@ -82,9 +106,21 @@ and Purple west.
   of `app/main.js`; the MR one is used by the Quest "Reset view" menu item and
   when a session starts.
 - P: show/hide the debug readout (small grey text; see "Debug readout" below).
+  The **Debug (P)** button in the top-left HUD does the same, and also
+  refreshes the colour table at once, for use on the Quest where there
+  is no P key.
 - K: cycle the sky: adjusted, raw, off (black).
+- T: tilt the board up 5°; Shift+T tilts it down 5° (0–180°, same as
+  grip + thumbstick in MR).
+- H: hide/show the whole top-left HUD panel. H again brings it
+  back. (This was Space; Space is the standard key for activating a
+  focused control, so it is left free for that — Enter and Space both
+  activate a focused button.)
+- C: clear the saved top-10 scores (no undo). The **Clear scores (C)**
+  button in the top-left HUD does the same.
 - N: next level. R: restart the current level (same pattern, icons restored).
-- The HTML buttons in the top-left do Next level / Restart level.
+- The HTML buttons in the top-left do Next level / Restart level,
+  Debug, and Clear scores.
 
 ## Repo layout — what is served, and what is not
 
@@ -97,6 +133,14 @@ CubeGameWebXR/                  repo root
   app/                          <-- web root: only this is served
     index.html                  served
     main.js                     served (loaded by index.html as ./main.js)
+    config.js                   served (constants, colours, storage keys)
+    state.js                    served (game state, incl. persisted scores)
+    cube.js                     served (cube: six separate face planes)
+    materials.js                served (cube/board/icon materials)
+    textures.js                 served (icon textures)
+    scene.js                    served (scene, camera, lights)
+    utils.js                    served (helpers, haptics)
+    buildTime.js                served (build timestamp from Last-Modified)
     Assets/
       starmap_2020_8k.jpg       served (adjusted sky, used when the GPU supports 8192 px textures)
       starmap_2020_4k.jpg       served (adjusted sky fallback for smaller GPUs)
@@ -104,8 +148,8 @@ CubeGameWebXR/                  repo root
       starmap_2020_4k_raw.jpg   served (unadjusted sky fallback)
 ```
 
-`app/index.html`, `app/main.js`, and the sky images in `app/Assets/` need
-to be served. Icons are drawn on canvas in `main.js`, and
+`app/index.html`, `app/main.js` and its modules, and the sky images in `app/Assets/` need
+to be served. Icons are drawn on canvas in `app/textures.js`, and
 Three.js r160 is loaded from a CDN via an import map in `index.html`.
 If you add assets later (textures, sounds, models), put them under
 `app/` — for example `app/Assets/` — so their relative URLs keep working
@@ -212,10 +256,13 @@ numbers; what you see is the difference between them.
 ## Files
 
 - `app/index.html` — page, HUD, import map for Three.js, loads `main.js`.
-- `app/main.js` — the whole game: board, cube orientation and rolling
-  animation, flat icons, level generation, thumbstick/grip input, and
-  the in-world status text (flat in the board plane, just past the near
-  edge toward the player, no background or border), and the sky background.
+- `app/main.js` — game flow: board, cube orientation and rolling
+  animation, flat icons, level generation, thumbstick/grip input,
+  appearance/menu panels, scores, and the in-world status text (flat
+  in the board plane, just past the near edge toward the player, no
+  background or border), and the sky background. Shared state lives in
+  `app/state.js`; constants and colours in `app/config.js`; the cube
+  (six separate face planes) in `app/cube.js`.
 - `app/Assets/starmap_2020_{8k,4k}[_raw].jpg` — the sky star maps (adjusted and raw; 8k preferred, 4k fallback).
 - `StartCubeGameWebXR.ps1` / `StopCubeGameWebXR.ps1` — local server +
   Cloudflare tunnel for Quest testing (repo root, not served).
@@ -227,6 +274,8 @@ numbers; what you see is the difference between them.
   the current level if a pattern feels stuck.
 - World rotation is yaw only, to keep the board horizontal.
 - Desktop world-drag by mouse is not implemented; use Q/E, +/-, and 0.
-- No sound, no timer, no score, and no hand-tracking controls yet.
+- No hand-tracking controls yet. There is sound, a clock, and a score
+  (see "Scores" above); scores persist, and are cleared only by C or
+  the Clear scores button in 2D.
 - Desktop behavior has been tested; Quest two-grip world dragging works,
   but thumbstick direction and the trigger have not been explicitly verified.

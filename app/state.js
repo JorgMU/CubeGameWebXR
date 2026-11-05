@@ -1,6 +1,6 @@
 // Centralized game state manager
 // This module manages all game state and provides accessor functions for consistent state management.
-import { INITIAL_ORIENTATION, START_COL, START_ROW } from './config.js';
+import { INITIAL_ORIENTATION, START_COL, START_ROW, SESSION_RECORDS_MAX, RECORDS_STORAGE_KEY } from './config.js';
 
 export const gameState = {
   // Level and progression
@@ -79,9 +79,28 @@ export const gameState = {
   appearanceDrag: null,
   appearance: {},
   
-  // Session records
-  sessionRecords: [],
+  // Session records — loaded from localStorage (see loadSessionRecords
+  // below), so the top 10 survive closing the page, like the appearance
+  // colours do under AP_STORAGE_KEY.
+  sessionRecords: loadSessionRecords(),
 };
+
+// Top-10 scores, persisted in localStorage. Bad or unavailable storage
+// (private mode, blocked cookies, a hand-edited value) falls back to an
+// empty list instead of breaking the game.
+function loadSessionRecords() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RECORDS_STORAGE_KEY));
+    if (!Array.isArray(saved)) return [];
+    const records = saved.filter((r) => r && Number.isFinite(r.level) && Number.isFinite(r.score) && Number.isFinite(r.elapsedSeconds) && typeof r.completedAt === 'string');
+    records.sort((a, b) => b.score - a.score || a.elapsedSeconds - b.elapsedSeconds);
+    return records.slice(0, SESSION_RECORDS_MAX);
+  } catch { return []; }
+}
+
+function saveSessionRecords() {
+  try { localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(gameState.sessionRecords)); } catch { /* ignore */ }
+}
 
 // ============================================================================
 // Level and Game Management
@@ -588,9 +607,11 @@ export function getSessionRecords() {
 export function addSessionRecord(record) {
   gameState.sessionRecords.push(record);
   gameState.sessionRecords.sort((a, b) => b.score - a.score || a.elapsedSeconds - b.elapsedSeconds);
-  gameState.sessionRecords.length = Math.min(gameState.sessionRecords.length, 10);
+  gameState.sessionRecords.length = Math.min(gameState.sessionRecords.length, SESSION_RECORDS_MAX);
+  saveSessionRecords();
 }
 
 export function clearSessionRecords() {
   gameState.sessionRecords.length = 0;
+  saveSessionRecords();
 }

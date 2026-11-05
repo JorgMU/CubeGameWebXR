@@ -8,7 +8,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // Import build timestamp (calculated dynamically from file modification dates)
 
 // Import configuration
-import { GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, BOARD_COLOR, BOARD_OPACITY, CUBE_FACE_BLUE, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
+import { GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, BOARD_COLOR, BOARD_OPACITY, CUBE_FACE_COLOR, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
 
 // Import utilities
 import { cellToLocal, keyOf, hsvCss, cssToHsv, apClamp01, formatTime, triggerHaptic, setHapticGamepad } from './utils.js';
@@ -60,7 +60,7 @@ import {
   getAppearancePrev, setAppearancePrev,
   getAppearanceTriggerPrev, setAppearanceTriggerPrev,
   getAppearanceDrag, setAppearanceDrag,
-  getSessionRecords, addSessionRecord
+  getSessionRecords, addSessionRecord, clearSessionRecords
 } from './state.js';
 
 // Import scene and rendering modules
@@ -201,8 +201,7 @@ const cubeIconTextures = createCubeIconTextures();
 initCube(cubeIconTextures);
 const cube = getCube();
 const cubeEdgeMaterial = new THREE.LineBasicMaterial({ color: CUBE_EDGE_COLOR });
-cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(cube.geometry), cubeEdgeMaterial));
-cube.renderOrder = 1; // after the board and icons so they show through it
+cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE, CUBE, CUBE)), cubeEdgeMaterial));
 worldGroup.add(cube);
 
 // --- In-world status text (tilted up beyond the far edge) ---
@@ -410,6 +409,7 @@ function restartLevel() {
 }
 
 // --- HUD ----------------------------------------------------------------------
+const hud = document.getElementById('hud');
 const hudLevel = document.getElementById('hudLevel');
 const hudRemaining = document.getElementById('hudRemaining');
 const hudDown = document.getElementById('hudDown');
@@ -456,9 +456,21 @@ function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, mes
   panelTexture.needsUpdate = true;
 }
 
+function clearScores() {
+  clearSessionRecords();
+  updateSessionRecords();
+  setMessage('Scores cleared.');
+}
+
 function updateSessionRecords() {
   const sessionRecords = getSessionRecords();
   hudRecords.replaceChildren();
+  if (!sessionRecords.length) {
+    const row = hudRecords.insertRow();
+    const cell = row.insertCell();
+    cell.colSpan = 4;
+    cell.textContent = 'Complete a level to add a record.';
+  }
   for (const record of sessionRecords) {
     const row = hudRecords.insertRow();
     [record.level, record.score, formatTime(record.elapsedSeconds), record.completedAt]
@@ -466,8 +478,9 @@ function updateSessionRecords() {
   }
   drawScoresPanel(sessionRecords);
 }
-const initialSessionRecords = getSessionRecords();
-drawScoresPanel(initialSessionRecords);
+// Populate both the HUD table and the in-world scores panel from the
+// persisted records (if any) on load — not just after the first win.
+updateSessionRecords();
 
 // --- Rolling ------------------------------------------------------------------
 
@@ -721,7 +734,10 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'e') worldGroup.rotateOnWorldAxis(WORLD_UP, -Math.PI / 12);
   else if (k === '=' || k === '+') worldGroup.scale.multiplyScalar(1.1);
   else if (k === '-' || k === '_') worldGroup.scale.multiplyScalar(0.9);
-  else if (k === 'p') { setDebugVisible(!getDebugVisible()); updateDebug(); }
+  else if (k === 'p') { setDebugVisible(!getDebugVisible()); updateDebug(); updateColorTable(); }
+  else if (k === 'c') clearScores(); // clear the persisted top-10 scores (no undo)
+  else if (k === 'h') { hud.style.display = hud.style.display === 'none' ? '' : 'none'; } // H: hide/show the top-left HUD panel (2D mode). Was Space; Space is the standard key for activating a focused control, so it is left free for that.
+  else if (k === 't') stepTilt(e.shiftKey ? -1 : 1); // desktop tilt: T up, Shift+T down (was missing in 2D mode)
   else if (k === 'k') toggleSky();
   else if (k === '0') {
     if (renderer.xr.isPresenting) { resetWorldForMR(); return; }
@@ -740,6 +756,8 @@ window.addEventListener('wheel', (e) => {
 }, { passive: false });
 document.getElementById('btnNext').addEventListener('click', nextLevel);
 document.getElementById('btnRestart').addEventListener('click', restartLevel);
+document.getElementById('btnDebug').addEventListener('click', () => { setDebugVisible(!getDebugVisible()); updateDebug(); updateColorTable(); });
+document.getElementById('btnClearScores').addEventListener('click', clearScores);
 
 // --- XR controllers: thumbstick roll + two-grip world drag ---------------------
 const controller0 = renderer.xr.getController(0);
@@ -999,7 +1017,7 @@ const AP_ITEMS = [
 
 const appearance = {
   board: { ...cssToHsv(BOARD_COLOR), a: BOARD_OPACITY },
-  cube: { ...cssToHsv(CUBE_FACE_BLUE), a: CUBE_OPACITY },
+  cube: { ...cssToHsv(CUBE_FACE_COLOR), a: CUBE_OPACITY },
   grid: { ...cssToHsv(`#${GRID_COLOR.toString(16).padStart(6, '0')}`), a: 1 },
   edges: { ...cssToHsv(CUBE_EDGE_COLOR), a: 1 },
 };
@@ -1009,6 +1027,17 @@ for (const col of COLORS) {
 appearance.shapeBorder = { ...cssToHsv(SHAPE_BORDER_COLOR), a: 1, w: SHAPE_BORDER_WIDTH };
 try {
   const saved = JSON.parse(localStorage.getItem(AP_STORAGE_KEY));
+  const isOldCubeDefault = saved && saved.cube && (
+    // Old green background default (#036500), or fixed8's white icon default.
+    (Math.abs(saved.cube.h - 120) < 1 && Math.abs(saved.cube.s - 1) < 0.05 && Math.abs(saved.cube.v - 0.396) < 0.02) ||
+    (Math.abs(saved.cube.s) < 0.05 && Math.abs(saved.cube.v - 1) < 0.02)
+  );
+  if (isOldCubeDefault) {
+    // Both were defaults for the wrong layer: green hid the green triangle
+    // as a background, white as a background would hide the yellow star.
+    // Reset to the new dark-grey default, keeping opacity.
+    saved.cube = { ...cssToHsv(CUBE_FACE_COLOR), a: saved.cube.a };
+  }
   for (const key of Object.keys(appearance)) {
     if (saved && saved[key] && ['h', 's', 'v', 'a'].every((k) => Number.isFinite(saved[key][k]))) {
       Object.assign(appearance[key], saved[key]);
@@ -1058,10 +1087,20 @@ function rebuildShapeTextures() {
 function applyCubeOpacity() {
   const appearance = getAppearance();
   const a = appearance.cube.a;
-  getCubeMaterials().forEach((mat) => { mat.opacity = a; });
+  getCubeMaterials().forEach((mat) => {
+    mat.opacity = a;
+    mat.transparent = a < 1;
+    mat.side = a < 1 ? THREE.DoubleSide : THREE.FrontSide;
+    mat.depthWrite = a >= 1;
+    mat.needsUpdate = true;
+  });
 }
 function rebuildCubeFaces() {
   const appearance = getAppearance();
+  // One background colour for all faces (appearance.cube, "Cube faces"),
+  // and each shape drawn in its own colour — the same as the board icons.
+  // Fixed8 had this backwards (per-face background, white shape); that is
+  // what made the faces coloured and the shapes grey.
   const bg = hsvCss(appearance.cube.h, appearance.cube.s, appearance.cube.v);
   const cubeMaterials = getCubeMaterials();
   const dirtyShapes = getDirtyShapes();

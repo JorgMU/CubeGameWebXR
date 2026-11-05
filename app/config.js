@@ -32,8 +32,15 @@ export const INITIAL_ORIENTATION = { up: 2, down: 5, north: 1, south: 3, east: 0
 // Board appearance
 export const BOARD_COLOR = '#000584';
 export const BOARD_OPACITY = 0.34;
-export const GRID_COLOR = 0xfff005; // yellow, as actually rendered (was dark navy, unused)
-export const CUBE_FACE_BLUE = '#036500';
+export const GRID_COLOR = 0x000000; // black — user's colour choice (Nov 5, 2026); was yellow 0xfff005
+// Cube faces: one background colour for ALL faces (see rebuildCubeFaces in
+// main.js); the shape on each face is drawn in that shape's own colour, as on
+// the board. The background must therefore not be any of the six shape
+// colours — the old green default (#036500) hid the green triangle, and a
+// per-face background (fixed8) put the colours on the wrong layer. Dark
+// neutral grey lets every shape colour read: red, green, blue, yellow,
+// purple and orange all pop on it.
+export const CUBE_FACE_COLOR = '#222222';
 export const CUBE_OPACITY = 0.6;
 export const CUBE_EDGE_COLOR = '#055200';
 export const SHAPE_BORDER_COLOR = '#000000';
@@ -79,4 +86,5 @@ export const BORDER_WIDTH_MAX = 30; // px on the 256 px icon texture
 
 // Session storage
 export const SESSION_RECORDS_MAX = 10;
+export const RECORDS_STORAGE_KEY = 'cubeGameRecords'; // top-10 scores, persisted like the appearance colours
 export const APPEARANCE_REBUILD_MS = 250;

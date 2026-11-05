@@ -11,11 +11,11 @@ export function initShapeStyles() {
   }
 }
 
-export function drawIcon(c, shape, background = null) {
+export function drawIcon(c, shape, background = null, fillOverride = null) {
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, 256, 256);
   if (background) { ctx.fillStyle = background; ctx.fillRect(0, 0, 256, 256); }
-  ctx.fillStyle = shapeStyles[shape].fill;
+  ctx.fillStyle = fillOverride ?? shapeStyles[shape].fill;
   ctx.strokeStyle = shapeStyles[shape].border;
   ctx.lineWidth = Math.max(shapeStyles[shape].width, 0.01);
   ctx.beginPath();
@@ -56,8 +56,8 @@ export function makeIconTexture(shape, background = null) {
   return tex;
 }
 
-export function redrawIconTexture(tex, shape, background = null) {
-  drawIcon(tex.image, shape, background);
+export function redrawIconTexture(tex, shape, background = null, fillOverride = null) {
+  drawIcon(tex.image, shape, background, fillOverride);
   tex.needsUpdate = true;
 }
 
