@@ -65,9 +65,12 @@
 </div>
 <canvas id="renderCanvas"></canvas>
 <script>
-  // Check if files have been updated since last load
-  const FILES_TO_CHECK = ['./index.html', './main.js', './config.js', './cube.js', './materials.js'];
-  
+  // Pre-load check: work out the newest Last-Modified among all served files,
+  // reload once if it changed since the last load, then load main.js with that
+  // timestamp as a cache-buster. If no file supplies Last-Modified, load
+  // main.js plainly and do NOT reload -- falling back to "now" here would
+  // reload in a loop, because "now" always differs.
+  const FILES_TO_CHECK = ['./index.html', './main.js', './config.js', './state.js', './cube.js', './materials.js', './scene.js', './textures.js', './utils.js'];
   async function calculateBuildTimestamp() {
     const timestamps = [];
     for (const file of FILES_TO_CHECK) {
@@ -77,38 +80,35 @@
         if (lastModified) timestamps.push(new Date(lastModified));
       } catch (e) {}
     }
-    if (timestamps.length === 0) return new Date().toISOString();
+    if (timestamps.length === 0) return null;
     const newestTime = new Date(Math.max(...timestamps.map(t => t.getTime())));
     const y = newestTime.getFullYear();
     const m = String(newestTime.getMonth() + 1).padStart(2, '0');
     const d = String(newestTime.getDate()).padStart(2, '0');
     const h = String(newestTime.getHours()).padStart(2, '0');
     const min = String(newestTime.getMinutes()).padStart(2, '0');
-    const s = String(newestTime.getSeconds()).padStart(2, '0');
-    return `${y}-${m}-${d}@${h}:${min}:${s}`;
+    const sec = String(newestTime.getSeconds()).padStart(2, '0');
+    return `${y}-${m}-${d}@${h}:${min}:${sec}`;
   }
-  
   async function initializeApp() {
     const currentTimestamp = await calculateBuildTimestamp();
+    const script = document.createElement('script');
+    script.type = 'module';
+    if (!currentTimestamp) {
+      script.src = './main.js';
+      document.body.appendChild(script);
+      return;
+    }
     const storedTimestamp = sessionStorage.getItem('buildTimestamp');
-    
-    // If timestamp changed, reload to get fresh cache
     if (storedTimestamp && storedTimestamp !== currentTimestamp) {
       sessionStorage.setItem('buildTimestamp', currentTimestamp);
       location.reload();
-      return; // Stop here, reload will restart script
+      return;
     }
-    
-    // Store timestamp for next session
     sessionStorage.setItem('buildTimestamp', currentTimestamp);
-    
-    // Load main.js with cache-busting query parameter
-    const script = document.createElement('script');
-    script.type = 'module';
     script.src = `./main.js?v=${currentTimestamp}`;
     document.body.appendChild(script);
   }
-  
   initializeApp();
 </script>
 </body>

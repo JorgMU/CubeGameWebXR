@@ -56,22 +56,26 @@ export function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// Haptics
+// Haptics: gamepads are registered from the XR session's input sources
+// (see readXRInput in main.js). The refactor checked window.leftGamepad /
+// window.rightGamepad, which nothing ever set, so haptics silently did nothing.
+const hapticGamepads = {};
+export function setHapticGamepad(hand, gamepad) {
+  if (hand === 'left' || hand === 'right') hapticGamepads[hand] = gamepad;
+}
 export function triggerHaptic(intensity, duration, hand = 'left') {
-  if (!('vibrate' in navigator)) return;
-  if (hand === 'left' && window.leftGamepad?.vibrationActuator) {
-    window.leftGamepad.vibrationActuator.playEffect('dual-rumble', {
-      startDelay: 0,
-      duration,
-      weakMagnitude: intensity,
-      strongMagnitude: intensity,
-    });
-  } else if (hand === 'right' && window.rightGamepad?.vibrationActuator) {
-    window.rightGamepad.vibrationActuator.playEffect('dual-rumble', {
-      startDelay: 0,
-      duration,
-      weakMagnitude: intensity,
-      strongMagnitude: intensity,
-    });
+  const hands = hand ? [hand] : ['left', 'right'];
+  for (const h of hands) {
+    const actuator = hapticGamepads[h]?.vibrationActuator;
+    if (!actuator) continue;
+    try {
+      const result = actuator.playEffect('dual-rumble', {
+        startDelay: 0,
+        duration,
+        weakMagnitude: intensity,
+        strongMagnitude: intensity,
+      });
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch { /* haptics are best-effort; never break the game */ }
   }
 }

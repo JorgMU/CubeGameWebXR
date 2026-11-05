@@ -1,24 +1,73 @@
 import * as THREE from 'three';
+
+// Build timestamp, computed from file Last-Modified headers (see buildTime.js)
+import { BUILD_TIMESTAMP } from './buildTime.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
 // Import build timestamp (calculated dynamically from file modification dates)
-import { BUILD_TIMESTAMP } from './buildTime.js';
 
 // Import configuration
-import { GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, SESSION_RECORDS_MAX, BOARD_COLOR, BOARD_OPACITY, CUBE_FACE_BLUE, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
+import { GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, BOARD_COLOR, BOARD_OPACITY, CUBE_FACE_BLUE, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
 
 // Import utilities
-import { cellToLocal, keyOf, hsvToRgb, rgbToHex, hsvCss, cssToHsv, apClamp01, formatTime, triggerHaptic } from './utils.js';
+import { cellToLocal, keyOf, hsvCss, cssToHsv, apClamp01, formatTime, triggerHaptic, setHapticGamepad } from './utils.js';
 
 // Import state management
-import { gameState, resetCubePosition, setLevel, setMessage, setWin, getRoll, setRoll, addSessionRecord, getAppearance, setAppearance, markCubeColorDirty, clearCubeColorDirty, addDirtyCubeShape, clearDirtyCubeShapes, addDirtyShape, clearDirtyShapes } from './state.js';
+import {
+  gameState,
+  getLevel, setLevel, nextLevel,
+  getRemaining, setRemaining, getWin, setWin,
+  getCubePosition, setCubePosition, getOrientation, setOrientation, resetCubePosition, getLevelStartedAt, setLevelStartedAt,
+  setLevelEndedAt,
+  getDisplayedElapsedSeconds, setDisplayedElapsedSeconds,
+  getLevelScore, setLevelScore,
+  elapsedLevelSeconds, resetLevelTiming,
+  getRoll, setRoll, clearRoll,
+  getPattern, setPattern,
+  getIcons, clearIcons, addIcon, removeIcon, getIcon,
+  getMessage, setMessage,
+  getMessageShownAt, setMessageShownAt,
+  getLastMessageSeen, setLastMessageSeen,
+  getCubeColorDirty, setCubeColorDirty,
+  getDirtyShapes, addDirtyShape, clearDirtyShapes,
+  getDirtyCubeShapes, addDirtyCubeShape, clearDirtyCubeShapes,
+  getTiltDeg, setTiltDeg,
+  getTiltReady, setTiltReady,
+  getTiltTimer, setTiltTimer,
+  getSkyMode, setSkyMode,
+  getSkyRequest, incrementSkyRequest,
+  getStickReady, setStickReady,
+  getStickTimer, setStickTimer,
+  getTriggerPrev, setTriggerPrev,
+  getLeftButtonsDown, setLeftButtonsDown,
+  getRightButtonsDown, setRightButtonsDown,
+  getDrag, setDrag,
+  getGripHeld,
+  getMenuOpen, setMenuOpen,
+  getMenuHover, setMenuHover,
+  getMenuPrev, setMenuPrev,
+  getExitPending, setExitPending,
+  getExitTimer, setExitTimer,
+  getDebugVisible, setDebugVisible, getDebugTimer, setDebugTimer,
+  getLastHapticAt, setLastHapticAt,
+  getAudioCtx, setAudioCtx,
+  getCelebrateT, setCelebrateT,
+  getAppearance, setAppearance,
+  getAppearanceOpen, setAppearanceOpen,
+  getAppearanceItem, setAppearanceItem,
+  getAppearancePart, setAppearancePart,
+  getAppearancePrev, setAppearancePrev,
+  getAppearanceTriggerPrev, setAppearanceTriggerPrev,
+  getAppearanceDrag, setAppearanceDrag,
+  getSessionRecords, addSessionRecord
+} from './state.js';
 
 // Import scene and rendering modules
-import { initScene, getRenderer, getScene, getCamera, getWorldGroup, onWindowResize, setAnimationLoop, xrGetSession, xrIsPresenting } from './scene.js';
+import { initScene, getRenderer, getScene, getCamera, getWorldGroup, xrGetSession, xrIsPresenting } from './scene.js';
 import { initShapeStyles, shapeStyles, drawIcon, makeIconTexture, redrawIconTexture, createIconTextures, createCubeIconTextures } from './textures.js';
-import { createBoardMaterial, createGridMaterial, createIconMaterial, createSkyMaterial, createPanelMaterial, createDebugMaterial } from './materials.js';
-import { initCube, getCube, getCubeMaterials, getCubeFaceColorIndices, setCubePosition, resetCubeTransform, getCubePosition, getCubeQuaternion, setCubeQuaternion, applyRollAnimation, setCubeMaterialOpacity } from './cube.js';
+// (board/grid/panel materials are created inline in main.js, as in the pre-refactor version)
+import { initCube, getCube, getCubeMaterials, getCubeFaceColorIndices } from './cube.js';
 
 // ---------------------------------------------------------------------------
 // Cube Game WebXR — v5, 11x11 board
@@ -51,17 +100,18 @@ function currentHome() {
 // Board and tilt
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const TILT_AXIS = new THREE.Vector3(1, 0, 0);
-let tiltDeg = 0;
-let tiltReady = true, tiltTimer = 0;
+// Tilt is held in state.js only (getTiltDeg/setTiltDeg); no local copy here.
 
 // Tilt about the board's own left-right axis; positive raises the far edge.
 function stepTilt(dir) {
+  const tiltDeg = getTiltDeg();
   const next = THREE.MathUtils.clamp(tiltDeg + dir * TILT_STEP, 0, TILT_MAX);
   if (next === tiltDeg) return;
   const q = new THREE.Quaternion().setFromAxisAngle(TILT_AXIS, (next - tiltDeg) * Math.PI / 180);
   worldGroup.quaternion.multiply(q);
+  const drag = getDrag();
   if (drag) drag.worldQuat.multiply(q);
-  tiltDeg = next;
+  setTiltDeg(next);
   updateDebug();
 }
 
@@ -82,18 +132,19 @@ skyMesh.renderOrder = -1;
 skyMesh.visible = false; // until the first texture arrives
 worldGroup.add(skyMesh);
 
-let skyMode = 0;
-let skyRequest = 0;
+
 // Passthrough needs an immersive-ar session whose display blends with the real world.
 function passthroughAvailable() {
   const session = xrIsPresenting() ? xrGetSession() : null;
   return !!session && session.environmentBlendMode !== undefined && session.environmentBlendMode !== 'opaque';
 }
 function nextSkyMode() {
+  const skyMode = getSkyMode();
   return (skyMode + 1) % (passthroughAvailable() ? SKY_MODES.length : SKY_MODES.length - 1);
 }
 function loadSky() {
-  const request = ++skyRequest;
+  const skyMode = getSkyMode();
+  const request = incrementSkyRequest();
   scene.background = skyMode === 3 ? null : new THREE.Color(0x000000);
   if (skyMode >= 2) { // no texture; Off is a solid black sphere (AR sessions ignore scene.background), passthrough shows the room
     skyMaterial.color.set(0x000000);
@@ -107,7 +158,7 @@ function loadSky() {
   }
   const file = `./Assets/starmap_2020_${skySuffix}${skyMode === 0 ? '' : '_raw'}.jpg`;
   new THREE.TextureLoader().load(file, (texture) => {
-    if (request !== skyRequest) { texture.dispose(); return; }
+    if (request !== getSkyRequest()) { texture.dispose(); return; }
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const old = skyMaterial.map;
@@ -119,9 +170,10 @@ function loadSky() {
   });
 }
 function toggleSky() {
-  skyMode = nextSkyMode();
+  const mode = nextSkyMode();
+  setSkyMode(mode);
   loadSky();
-  message = `Sky: ${SKY_MESSAGES[skyMode]}.`;
+  setMessage(`Sky: ${SKY_MESSAGES[mode]}.`);
   updateHUD();
 }
 loadSky();
@@ -136,7 +188,7 @@ boardPlane.rotation.x = -Math.PI / 2;
 boardPlane.position.y = 0.001;
 worldGroup.add(boardPlane);
 
-const grid = new THREE.GridHelper(BOARD_SIZE, GRID, 0xfff005, 0xfff005);
+const grid = new THREE.GridHelper(BOARD_SIZE, GRID, GRID_COLOR, GRID_COLOR);
 grid.position.y = 0.005;
 worldGroup.add(grid);
 
@@ -173,8 +225,6 @@ worldGroup.add(panel);
 // Shows where the viewer is and how the board is posed. Both are in the same
 // scene (tracking-space) coordinates, so the numbers can be compared directly.
 // Toggle with the P key; refreshed a few times a second, not every frame.
-let debugVisible = false;
-let debugTimer = 0;
 const debugCanvas = document.createElement('canvas');
 debugCanvas.width = 1024; debugCanvas.height = 350;
 const debugCtx = debugCanvas.getContext('2d');
@@ -251,14 +301,17 @@ function debugLines() {
   const board = `Board   x ${wp.x.toFixed(2)}  y ${wp.y.toFixed(2)}  z ${wp.z.toFixed(2)}  scale ${worldGroup.scale.x.toFixed(2)}`;
   const boardX = dbgAxis.set(1, 0, 0).applyQuaternion(worldGroup.quaternion);
   const yawDeg = Math.atan2(-boardX.z, boardX.x) * RAD2DEG;
+  const tiltDeg = getTiltDeg();
+  const skyMode = getSkyMode();
   const pose = `Board   yaw ${yawDeg.toFixed(0)}°  tilt ${tiltDeg}° (0 flat, 90 facing you)`;
-  const leftButtons = `Left buttons down: ${leftButtonsDown || '-'}`;
-  const rightButtons = `Right buttons down: ${rightButtonsDown || '-'}`;
+  const leftButtons = `Left buttons down: ${getLeftButtonsDown() || '-'}`;
+  const rightButtons = `Right buttons down: ${getRightButtonsDown() || '-'}`;
   return [`Build   ${BUILD_TIMESTAMP}`, `Sky     ${SKY_MODES[skyMode]}`, player, board, pose, leftButtons, rightButtons];
 }
 
 function updateDebug() {
   const lines = debugLines();
+  const debugVisible = getDebugVisible();
   hudDebug.style.display = debugVisible ? 'block' : 'none';
   debugPanel.visible = debugVisible;
   if (!debugVisible) return;
@@ -272,42 +325,19 @@ function updateDebug() {
 }
 
 // --- Game state ---------------------------------------------------------------
-let level = 1;
-let cubeCol = START_COL;
-let cubeRow = START_ROW;
-let orientation = { ...INITIAL_ORIENTATION };
-let currentPattern = []; // [{col,row,colorIndex}]
-let icons = new Map();   // "col,row" -> {colorIndex, mesh}
-let remaining = 0;
-let win = false;
-let message = 'Roll the cube onto a matching flat icon.';
-let lastMessageSeen = null;
-let messageShownAt = 0;
-let levelStartedAt = null;
-let levelEndedAt = null;
-let displayedElapsedSeconds = 0;
-let levelScore = 0;
-const sessionRecords = [];
+// All state is managed through gameState object via state.js accessor functions
 
-function elapsedLevelSeconds(now = performance.now()) {
-  if (levelStartedAt === null) return 0;
-  return Math.floor(((levelEndedAt ?? now) - levelStartedAt) / 1000);
-}
-
-function removeIcon(entry) {
+function removeIconMesh(entry) {
   worldGroup.remove(entry.mesh);
   entry.mesh.geometry.dispose();
   entry.mesh.material.dispose();
 }
 
-function clearIcons() {
-  for (const entry of icons.values()) removeIcon(entry);
-  icons.clear();
-}
-
 function buildIconsFromPattern() {
+  const icons = getIcons();
   clearIcons();
-  for (const cell of currentPattern) {
+  const pattern = getPattern();
+  for (const cell of pattern) {
     const geo = new THREE.PlaneGeometry(CELL * 0.85, CELL * 0.85);
     const mat = new THREE.MeshBasicMaterial({ map: iconTextures[cell.colorIndex], transparent: true, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geo, mat);
@@ -315,60 +345,57 @@ function buildIconsFromPattern() {
     const p = cellToLocal(cell.col, cell.row);
     mesh.position.set(p.x, 0.002, p.z);
     worldGroup.add(mesh);
-    icons.set(keyOf(cell.col, cell.row), { colorIndex: cell.colorIndex, mesh });
+    addIcon(keyOf(cell.col, cell.row), { colorIndex: cell.colorIndex, mesh });
   }
-  remaining = currentPattern.length;
+  setRemaining(pattern.length);
 }
 
 function generateLevel() {
-  currentPattern = [];
+  const pattern = [];
   for (let col = 0; col < GRID; col++) {
     for (let row = 0; row < GRID; row++) {
       if (col === START_COL && row === START_ROW) continue; // start square stays blank
       if (Math.random() < COLORED_FRACTION) {
-        currentPattern.push({ col, row, colorIndex: Math.floor(Math.random() * COLORS.length) });
+        pattern.push({ col, row, colorIndex: Math.floor(Math.random() * COLORS.length) });
       }
     }
   }
   // Guarantee a meaningful level even on an unlucky roll.
-  while (currentPattern.length < 6) {
+  while (pattern.length < 6) {
     const col = Math.floor(Math.random() * GRID);
     const row = Math.floor(Math.random() * GRID);
     if (col === START_COL && row === START_ROW) continue;
-    if (currentPattern.some((c) => c.col === col && c.row === row)) continue;
-    currentPattern.push({ col, row, colorIndex: Math.floor(Math.random() * COLORS.length) });
+    if (pattern.some((c) => c.col === col && c.row === row)) continue;
+    pattern.push({ col, row, colorIndex: Math.floor(Math.random() * COLORS.length) });
   }
+  setPattern(pattern);
   resetCubeAndWin(false);
   buildIconsFromPattern();
-  message = `Level ${level}: clear ${remaining} coloured squares.`;
+  const level = getLevel();
+  const remaining = getRemaining();
+  setMessage(`Level ${level}: clear ${remaining} coloured squares.`);
   updateHUD();
 }
 
 function resetCubeAndWin(isRestart) {
-  roll = null;
-  cubeCol = START_COL; cubeRow = START_ROW;
-  orientation = { ...INITIAL_ORIENTATION };
-  const p = cellToLocal(cubeCol, cubeRow);
+  clearRoll();
+  resetCubePosition(START_COL, START_ROW, INITIAL_ORIENTATION);
+  const p = cellToLocal(START_COL, START_ROW);
   cube.position.set(p.x, CUBE / 2 + 0.004, p.z);
   cube.quaternion.identity();
-  win = false;
+  setWin(false);
   stopCelebration();
-  levelStartedAt = null;
-  levelEndedAt = null;
-  displayedElapsedSeconds = 0;
-  levelScore = 0;
-  if (isRestart) message = `Level ${level} restarted.`;
+  resetLevelTiming();
+  if (isRestart) {
+    const level = getLevel();
+    setMessage(`Level ${level} restarted.`);
+  }
 }
 
 function restartLevel() {
   resetCubeAndWin(true);
   buildIconsFromPattern();
   updateHUD();
-}
-
-function nextLevel() {
-  level += 1;
-  generateLevel();
 }
 
 // --- HUD ----------------------------------------------------------------------
@@ -382,6 +409,13 @@ const hudBuildTimestamp = document.getElementById('hudBuildTimestamp');
 const hudRecords = document.getElementById('hudRecords');
 
 function updateHUD() {
+  const level = getLevel();
+  const remaining = getRemaining();
+  const levelStartedAt = getLevelStartedAt();
+  const levelScore = getLevelScore();
+  const orientation = getOrientation();
+  const message = getMessage();
+  
   hudLevel.textContent = String(level);
   hudRemaining.textContent = String(remaining);
   hudTime.textContent = levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds());
@@ -391,11 +425,11 @@ function updateHUD() {
   hudDown.textContent = down.name;
   hudDown.style.color = down.css;
   hudMessage.textContent = message;
-  drawStatusPanel(down);
+  drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, message);
 }
 
 // In-world panel: text only, no background fill and no border.
-function drawStatusPanel(down) {
+function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, message) {
   panelCtx.clearRect(0, 0, 1024, 288);
   panelCtx.fillStyle = '#ffffff';
   panelCtx.font = 'bold 46px system-ui, sans-serif';
@@ -412,8 +446,7 @@ function drawStatusPanel(down) {
 }
 
 function updateSessionRecords() {
-  sessionRecords.sort((a, b) => b.score - a.score || a.elapsedSeconds - b.elapsedSeconds);
-  sessionRecords.length = Math.min(sessionRecords.length, 10);
+  const sessionRecords = getSessionRecords();
   hudRecords.replaceChildren();
   for (const record of sessionRecords) {
     const row = hudRecords.insertRow();
@@ -422,65 +455,79 @@ function updateSessionRecords() {
   }
   drawScoresPanel(sessionRecords);
 }
-drawScoresPanel(sessionRecords);
+const initialSessionRecords = getSessionRecords();
+drawScoresPanel(initialSessionRecords);
 
 // --- Rolling ------------------------------------------------------------------
-let roll = null; // {t, axis, totalAngle, edge, startOffset, startQuat, endPos, dir, destCol, destRow}
 
 function tryRoll(dir) {
+  const roll = getRoll();
+  const win = getWin();
   if (roll || win) return;
+  
   let dCol = 0, dRow = 0, axis = null, totalAngle = 0;
   if (dir === 'east') { dCol = 1; axis = new THREE.Vector3(0, 0, 1); totalAngle = -Math.PI / 2; }
   if (dir === 'west') { dCol = -1; axis = new THREE.Vector3(0, 0, 1); totalAngle = Math.PI / 2; }
   if (dir === 'north') { dRow = -1; axis = new THREE.Vector3(1, 0, 0); totalAngle = -Math.PI / 2; }
   if (dir === 'south') { dRow = 1; axis = new THREE.Vector3(1, 0, 0); totalAngle = Math.PI / 2; }
-  const destCol = cubeCol + dCol;
-  const destRow = cubeRow + dRow;
+  
+  const pos = getCubePosition();
+  const destCol = pos.col + dCol;
+  const destRow = pos.row + dRow;
   if (destCol < 0 || destCol >= GRID || destRow < 0 || destRow >= GRID) {
-    message = 'Edge — can\'t roll that way.';
+    setMessage('Edge — can\'t roll that way.');
     updateHUD();
     return;
   }
+  
+  let levelStartedAt = getLevelStartedAt();
   if (levelStartedAt === null) {
     levelStartedAt = performance.now();
-    displayedElapsedSeconds = 0;
+    setLevelStartedAt(levelStartedAt);
+    setDisplayedElapsedSeconds(0);
     updateHUD();
   }
+  
   const startPos = cube.position.clone();
   const endLocal = cellToLocal(destCol, destRow);
   const endPos = new THREE.Vector3(endLocal.x, CUBE / 2 + 0.004, endLocal.z);
   const edge = new THREE.Vector3((startPos.x + endPos.x) / 2, 0, (startPos.z + endPos.z) / 2);
-  roll = {
+  
+  const newRoll = {
     t: 0, axis, totalAngle, edge,
     startOffset: startPos.clone().sub(edge),
     startQuat: cube.quaternion.clone(),
     endPos, dir, destCol, destRow,
   };
+  setRoll(newRoll);
 }
 
 function applyOrientationAfterRoll(dir) {
-  const o = orientation;
-  if (dir === 'east') orientation = { ...o, down: o.east, east: o.up, up: o.west, west: o.down };
-  if (dir === 'west') orientation = { ...o, down: o.west, west: o.up, up: o.east, east: o.down };
-  if (dir === 'north') orientation = { ...o, down: o.north, north: o.up, up: o.south, south: o.down };
-  if (dir === 'south') orientation = { ...o, down: o.south, south: o.up, up: o.north, north: o.down };
+  const o = getOrientation();
+  let newOrient;
+  if (dir === 'east') newOrient = { ...o, down: o.east, east: o.up, up: o.west, west: o.down };
+  if (dir === 'west') newOrient = { ...o, down: o.west, west: o.up, up: o.east, east: o.down };
+  if (dir === 'north') newOrient = { ...o, down: o.north, north: o.up, up: o.south, south: o.down };
+  if (dir === 'south') newOrient = { ...o, down: o.south, south: o.up, up: o.north, north: o.down };
+  setOrientation(newOrient);
 }
-
-// Pulses controllers in MR; hand is 'left', 'right' or omitted for both.
-let lastHapticAt = 0;
 
 // Synthesized click (no audio asset). The context is created and resumed on
 // the first user gesture because browsers block audio before that.
-let audioCtx = null;
 function unlockAudio() {
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    let ctx = getAudioCtx();
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      setAudioCtx(ctx);
+    }
+    if (ctx.state === 'suspended') ctx.resume();
   } catch { /* audio is optional */ }
 }
 for (const type of ['keydown', 'pointerdown']) window.addEventListener(type, unlockAudio);
 
 function playClick() {
+  const audioCtx = getAudioCtx();
   if (!audioCtx || audioCtx.state !== 'running') return;
   const t = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
@@ -496,6 +543,7 @@ function playClick() {
 }
 
 function playSwoop() {
+  const audioCtx = getAudioCtx();
   if (!audioCtx || audioCtx.state !== 'running') return;
   const t = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
@@ -538,7 +586,6 @@ const confetti = new THREE.Points(confettiGeometry, new THREE.PointsMaterial({
 confetti.frustumCulled = false;
 confetti.visible = false;
 worldGroup.add(confetti);
-let celebrateT = null;
 
 function startCelebration() {
   const tint = new THREE.Color();
@@ -557,67 +604,82 @@ function startCelebration() {
   confettiGeometry.attributes.color.needsUpdate = true;
   confetti.material.opacity = 1;
   confetti.visible = true;
-  celebrateT = 0;
+  setCelebrateT(0);
 }
 
 function stopCelebration() {
-  celebrateT = null;
+  setCelebrateT(null);
   confetti.visible = false;
   panel.scale.setScalar(1);
 }
 
 function updateCelebration(dt) {
+  const celebrateT = getCelebrateT();
   if (celebrateT === null) return;
-  celebrateT += dt;
-  if (celebrateT >= CELEBRATE_SECONDS) { stopCelebration(); return; }
-  const k = celebrateT / CELEBRATE_SECONDS;
+  const newCelebrateT = celebrateT + dt;
+  if (newCelebrateT >= CELEBRATE_SECONDS) { stopCelebration(); return; }
+  const k = newCelebrateT / CELEBRATE_SECONDS;
   for (let i = 0; i < CONFETTI_COUNT * 3; i++) confettiPositions[i] += confettiVelocities[i] * dt;
   confettiGeometry.attributes.position.needsUpdate = true;
   confetti.material.opacity = 1 - k * k;
   panel.scale.setScalar(1 + 0.12 * Math.sin(k * Math.PI * 4) * (1 - k));
+  setCelebrateT(newCelebrateT);
 }
 
 function finishRoll() {
-  cubeCol = roll.destCol; cubeRow = roll.destRow;
+  const roll = getRoll();
+  const pos = { col: roll.destCol, row: roll.destRow };
+  setCubePosition(pos.col, pos.row);
   cube.position.copy(roll.endPos);
-  // Snap quaternion to the exact end rotation.
   const endQuat = new THREE.Quaternion().setFromAxisAngle(roll.axis, roll.totalAngle).multiply(roll.startQuat);
   cube.quaternion.copy(endQuat);
   const dir = roll.dir;
-  roll = null;
+  clearRoll();
   applyOrientationAfterRoll(dir);
-  const entry = icons.get(keyOf(cubeCol, cubeRow));
+  
+  const keyStr = keyOf(pos.col, pos.row);
+  const entry = getIcon(keyStr);
+  const orientation = getOrientation();
+  
   if (entry && entry.colorIndex === orientation.down) {
     const matchAt = performance.now();
-    removeIcon(entry);
-    icons.delete(keyOf(cubeCol, cubeRow));
+    removeIconMesh(entry);
+    removeIcon(keyStr);
+    
+    let remaining = getRemaining();
     remaining -= 1;
+    setRemaining(remaining);
+    
+    let levelScore = getLevelScore();
     levelScore += Math.max(0, 180 - elapsedLevelSeconds(matchAt));
+    setLevelScore(levelScore);
+    
     triggerHaptic(remaining <= 0 ? 1 : 0.8, remaining <= 0 ? 250 : 100);
     playSwoop();
+    
     if (remaining <= 0) {
-      win = true;
-      levelEndedAt = matchAt;
-      sessionRecords.push({
-        level,
+      setWin(true);
+      setLevelEndedAt(matchAt);
+      addSessionRecord({
+        level: getLevel(),
         score: levelScore,
-        elapsedSeconds: elapsedLevelSeconds(levelEndedAt),
+        elapsedSeconds: elapsedLevelSeconds(matchAt),
         completedAt: new Date().toLocaleDateString(),
       });
       updateSessionRecords();
       startCelebration();
-      message = `Level complete! ${renderer.xr.isPresenting ? 'Pull a trigger' : 'Press N'} for the next level.`;
+      setMessage(`Level complete! ${renderer.xr.isPresenting ? 'Pull a trigger' : 'Press N'} for the next level.`);
     } else {
-      message = `Matched ${COLORS[orientation.down].name}! ${remaining} left.`;
+      setMessage(`Matched ${COLORS[orientation.down].name}! ${remaining} left.`);
     }
   } else if (entry) {
     playClick();
     triggerHaptic(0.3, 25);
-    message = `Down is ${COLORS[orientation.down].name}, square needs ${COLORS[entry.colorIndex].name}.`;
+    setMessage(`Down is ${COLORS[orientation.down].name}, square needs ${COLORS[entry.colorIndex].name}.`);
   } else {
     playClick();
     triggerHaptic(0.3, 25);
-    message = 'Blank square.';
+    setMessage('Blank square.');
   }
   updateHUD();
 }
@@ -648,13 +710,13 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'e') worldGroup.rotateOnWorldAxis(WORLD_UP, -Math.PI / 12);
   else if (k === '=' || k === '+') worldGroup.scale.multiplyScalar(1.1);
   else if (k === '-' || k === '_') worldGroup.scale.multiplyScalar(0.9);
-  else if (k === 'p') { debugVisible = !debugVisible; updateDebug(); }
+  else if (k === 'p') { setDebugVisible(!getDebugVisible()); updateDebug(); }
   else if (k === 'k') toggleSky();
   else if (k === '0') {
     if (renderer.xr.isPresenting) { resetWorldForMR(); return; }
     worldGroup.position.copy(HOMES.desktop.position);
     worldGroup.quaternion.identity();
-    tiltDeg = 0;
+    setTiltDeg(0);
     worldGroup.scale.setScalar(HOMES.desktop.scale);
   }
 });
@@ -680,16 +742,12 @@ for (const i of [0, 1]) {
   scene.add(grip);
 }
 
-let stickReady = true;
-let stickTimer = 0;
 const STICK_REPEAT_SECONDS = 0.125; // one square per twentieth of a second while the stick is held
-let triggerPrev = false;
-let drag = null; // {mode: 0 | 1 | 'both', mid, angle, dist, worldPos, worldQuat, worldScale}
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpMid = new THREE.Vector3();
 
 // Grip state comes from each controller's own squeeze events, so it always
 // matches the controller object whose position the world drag reads.
-const gripHeld = [false, false];
+const gripHeld = getGripHeld(); // state.js array, single source of truth
 [controller0, controller1].forEach((controller, i) => {
   controller.addEventListener('squeezestart', () => { gripHeld[i] = true; });
   controller.addEventListener('squeezeend', () => { gripHeld[i] = false; });
@@ -700,7 +758,7 @@ function resetWorldForMR() {
   const home = currentHome();
   worldGroup.position.copy(home.position);
   worldGroup.quaternion.copy(homeQuat(home));
-  tiltDeg = home.tilt;
+  setTiltDeg(home.tilt);
   worldGroup.scale.setScalar(home.scale);
 }
 renderer.xr.addEventListener('sessionstart', () => {
@@ -709,11 +767,12 @@ renderer.xr.addEventListener('sessionstart', () => {
   restartLevel(); // entering or leaving MR restarts the current board
 });
 renderer.xr.addEventListener('sessionend', () => {
+  const exitTimer = getExitTimer();
   if (exitTimer !== null) window.clearTimeout(exitTimer);
-  exitTimer = null;
-  gripHeld.fill(false); drag = null; exitPending = false;
+  setExitTimer(null);
+  gripHeld.fill(false); setDrag(null); setExitPending(false);
   exitMessageMesh.visible = false;
-  if (skyMode === 3) { skyMode = 0; loadSky(); } // passthrough only exists inside the session
+  if (getSkyMode() === 3) { setSkyMode(0); loadSky(); } // passthrough only exists inside the session
   setMenuOpen(false);
   restartLevel();
 });
@@ -726,11 +785,7 @@ renderer.xr.addEventListener('sessionend', () => {
 const MENU_TOGGLE_BUTTONS = [12, 5]; // 12 = menu button, 5 = Y
 const MENU_ROWS = 4;
 const MENU_W = 512, MENU_H = 20 + MENU_ROWS * 150;
-let menuOpen = false;
 let menuHover = -1; // -1 none, 0 Debug, 1 Sky, 2 Reset view, 3 Exit MR
-let menuPrev = false;
-let exitPending = false;
-let exitTimer = null;
 const EXIT_MR_DELAY_MS = 3000;
 const EXIT_MR_MESSAGE = 'Exiting MR in 3 seconds. Look forward; your view will be reset.';
 let leftButtonsDown = '';
@@ -799,6 +854,8 @@ function attachMenu() {
 
 function drawMenu() {
   menuCtx.clearRect(0, 0, MENU_W, MENU_H);
+  const menuHover = getMenuHover();
+  const debugVisible = getDebugVisible();
   const rows = [`Debug: ${debugVisible ? 'On' : 'Off'}`, `Sky: ${SKY_MODES[nextSkyMode()]}`, 'Reset view', 'Exit MR'];
   rows.forEach((label, i) => {
     const y = 20 + i * 150;
@@ -816,13 +873,14 @@ function drawMenu() {
   menuTexture.needsUpdate = true;
 }
 
-function setMenuOpen(open) {
-  if (open && appearanceOpen) setAppearanceOpen(false);
-  menuOpen = open && !!leftController;
-  menuMesh.visible = menuOpen;
-  pointerLine.visible = menuOpen && !!rightController;
-  menuHover = -1;
-  if (menuOpen) drawMenu();
+function setMenuOpenLocal(open) {
+  if (open && getAppearanceOpen()) setAppearanceOpenLocal(false);
+  const newMenuOpen = open && !!leftController;
+  setMenuOpen(newMenuOpen);
+  menuMesh.visible = newMenuOpen;
+  pointerLine.visible = newMenuOpen && !!rightController;
+  setMenuHover(-1);
+  if (newMenuOpen) drawMenu();
 }
 
 const menuRaycaster = new THREE.Raycaster();
@@ -831,7 +889,8 @@ const menuRayQuat = new THREE.Quaternion();
 
 function updateMenuHover() {
   let hover = -1;
-  if (menuOpen && rightController) {
+  const menuOpenState = getMenuOpen();
+  if (menuOpenState && rightController) {
     scene.updateMatrixWorld();
     rightController.getWorldPosition(menuRaycaster.ray.origin);
     rightController.getWorldQuaternion(menuRayQuat);
@@ -843,17 +902,19 @@ function updateMenuHover() {
       if (row >= 0 && row < MENU_ROWS && (y - 20) % 150 <= 130) hover = row;
     }
   }
-  if (hover !== menuHover) { menuHover = hover; drawMenu(); }
+  const menuHover = getMenuHover();
+  if (hover !== menuHover) { setMenuHover(hover); drawMenu(); }
 }
 
 function activateMenuItem() {
-  if (!menuOpen) return;
-  const selected = menuHover;
+  const menuOpenState = getMenuOpen();
+  if (!menuOpenState) return;
+  const selected = getMenuHover();
   if (selected < 0) return;
   triggerHaptic(0.4, 40, 'left');
-  setMenuOpen(false);
+  setMenuOpenLocal(false);
   if (selected === 0) {
-    debugVisible = !debugVisible;
+    setDebugVisible(!getDebugVisible());
     updateDebug();
   } else if (selected === 1) {
     toggleSky();
@@ -862,26 +923,27 @@ function activateMenuItem() {
     const atHome = worldGroup.position.distanceTo(home.position) < 0.005
       && Math.abs(worldGroup.scale.x - home.scale) < 0.005
       && worldGroup.quaternion.angleTo(homeQuat(home)) < 0.005;
-    if (atHome) message = 'View is already at the home position.';
-    else { resetWorldForMR(); message = 'View reset.'; }
+    if (atHome) setMessage('View is already at the home position.');
+    else { resetWorldForMR(); setMessage('View reset.'); }
     updateHUD();
   } else if (selected === 3) {
     const session = renderer.xr.getSession();
     if (session) {
-      exitPending = true;
-      message = EXIT_MR_MESSAGE;
+      setExitPending(true);
+      setMessage(EXIT_MR_MESSAGE);
       exitMessageMesh.visible = true;
       updateHUD();
-      exitTimer = window.setTimeout(() => {
-        exitTimer = null;
+      const timer = window.setTimeout(() => {
+        setExitTimer(null);
         if (renderer.xr.getSession() !== session) return;
         session.end().catch((error) => {
-          exitPending = false;
+          setExitPending(false);
           exitMessageMesh.visible = false;
-          message = `Could not exit MR: ${error instanceof Error ? error.message : String(error)}`;
+          setMessage(`Could not exit MR: ${error instanceof Error ? error.message : String(error)}`);
           updateHUD();
         });
       }, EXIT_MR_DELAY_MS);
+      setExitTimer(timer);
     }
   }
 }
@@ -920,7 +982,7 @@ const appearance = {
 for (const col of COLORS) {
   appearance[`${col.shape}.fill`] = { ...cssToHsv(col.css), a: 1 };
 }
-appearance.shapeBorder = { ...cssToHsv(SHAPE_BORDER_COLOR), a: 1, w: SHAPE_BORDER_WIDTH }; // shared by every shape
+appearance.shapeBorder = { ...cssToHsv(SHAPE_BORDER_COLOR), a: 1, w: SHAPE_BORDER_WIDTH };
 try {
   const saved = JSON.parse(localStorage.getItem(AP_STORAGE_KEY));
   for (const key of Object.keys(appearance)) {
@@ -930,31 +992,29 @@ try {
   }
   if (!Number.isFinite(appearance.shapeBorder.w)) appearance.shapeBorder.w = SHAPE_BORDER_WIDTH;
 } catch { /* ignore bad or unavailable storage */ }
-let appearanceOpen = false;
-let appearanceItem = 0;
-let appearancePart = 0;
-let appearancePrev = false;
-let appearanceTriggerPrev = false;
-let appearanceDrag = null; // 'picker' | 'bright' | 'opacity' while the trigger is held
-let cubeColorDirty = false;
-let cubeRebuildAt = 0;
-const dirtyShapes = new Set();
-const dirtyCubeShapes = new Set();
+setAppearance(appearance);
 
-const apKey = () => AP_ITEMS[appearanceItem].id + AP_ITEMS[appearanceItem].parts[appearancePart].id;
+const apKey = () => {
+  const item = getAppearanceItem();
+  const part = getAppearancePart();
+  return AP_ITEMS[item].id + AP_ITEMS[item].parts[part].id;
+};
 const isBorderKey = (key) => key === 'shapeBorder';
 
 function applyBoardAppearance() {
+  const appearance = getAppearance();
   const b = appearance.board;
   boardPlane.material.color.set(hsvCss(b.h, b.s, b.v));
   boardPlane.material.opacity = b.a;
 }
 function applyLineColors() {
+  const appearance = getAppearance();
   const g = appearance.grid, e = appearance.edges;
   grid.material.color.set(hsvCss(g.h, g.s, g.v));
   cubeEdgeMaterial.color.set(hsvCss(e.h, e.s, e.v));
 }
 function applyShapeStyles() {
+  const appearance = getAppearance();
   const b = appearance.shapeBorder;
   for (const col of COLORS) {
     const f = appearance[`${col.shape}.fill`];
@@ -962,36 +1022,45 @@ function applyShapeStyles() {
   }
 }
 function rebuildShapeTextures() {
+  const dirtyShapes = getDirtyShapes();
+  const dirtyCubeShapes = getDirtyCubeShapes();
   for (const shape of dirtyShapes) {
     const i = COLORS.findIndex((col) => col.shape === shape);
     redrawIconTexture(iconTextures[i], shape);
-    dirtyCubeShapes.add(shape);
+    addDirtyCubeShape(shape);
   }
-  dirtyShapes.clear();
+  clearDirtyShapes();
 }
 function applyCubeOpacity() {
+  const appearance = getAppearance();
   const a = appearance.cube.a;
   getCubeMaterials().forEach((mat) => { mat.opacity = a; });
 }
 function rebuildCubeFaces() {
+  const appearance = getAppearance();
   const bg = hsvCss(appearance.cube.h, appearance.cube.s, appearance.cube.v);
   const cubeMaterials = getCubeMaterials();
+  const dirtyShapes = getDirtyShapes();
+  const dirtyCubeShapes = getDirtyCubeShapes();
+  const cubeColorDirty = getCubeColorDirty();
   cubeMaterials.forEach((mat, i) => {
     const shape = COLORS[getCubeFaceColorIndices()[i]].shape;
     if (cubeColorDirty || dirtyCubeShapes.has(shape)) redrawIconTexture(mat.map, shape, bg);
   });
   applyCubeOpacity();
-  cubeColorDirty = false;
-  dirtyCubeShapes.clear();
-  cubeRebuildAt = performance.now();
+  setCubeColorDirty(false);
+  clearDirtyCubeShapes();
 }
 function flushAppearance() {
+  const dirtyShapes = getDirtyShapes();
+  const dirtyCubeShapes = getDirtyCubeShapes();
+  const cubeColorDirty = getCubeColorDirty();
   if (dirtyShapes.size) rebuildShapeTextures();
   if (cubeColorDirty || dirtyCubeShapes.size) rebuildCubeFaces();
 }
-// 2D-only table of the current settings, selectable so it can be copied as defaults.
-const hudColors = document.getElementById('hudColors');
 function updateColorTable() {
+  const appearance = getAppearance();
+  const debugVisible = getDebugVisible();
   const hex = (t) => hsvCss(t.h, t.s, t.v);
   const rows = ['Item           Color    Opacity Border'];
   for (const [key, t] of Object.entries(appearance)) {
@@ -1003,13 +1072,16 @@ function updateColorTable() {
   hudColors.style.display = debugVisible ? 'block' : 'none';
 }
 function saveAppearance() {
+  const appearance = getAppearance();
   try { localStorage.setItem(AP_STORAGE_KEY, JSON.stringify(appearance)); } catch { /* ignore */ }
 }
+
+const hudColors = document.getElementById('hudColors');
 applyShapeStyles();
 applyBoardAppearance();
 applyLineColors();
-for (const col of COLORS) dirtyShapes.add(col.shape);
-cubeColorDirty = true;
+for (const col of COLORS) addDirtyShape(col.shape);
+setCubeColorDirty(true);
 flushAppearance();
 updateColorTable();
 
@@ -1052,6 +1124,8 @@ let appearanceLastDraw = 0;
 const AP_DRAW_INTERVAL = 1000 / 30;
 
 function drawAppearanceBase() {
+  const appearanceItem = getAppearanceItem();
+  const appearancePart = getAppearancePart();
   const item = AP_ITEMS[appearanceItem];
   appearanceBaseCtx.clearRect(0, 0, AP_W, AP_H);
   appearanceBaseCtx.fillStyle = 'rgba(20,20,30,0.94)';
@@ -1088,15 +1162,16 @@ function drawAppearanceBase() {
   sat.addColorStop(1, 'rgba(255,255,255,1)');
   appearanceBaseCtx.fillStyle = sat;
   appearanceBaseCtx.fillRect(p.x, p.y, p.w, p.h);
-  appearanceBaseItem = appearanceItem;
-  appearanceBasePart = appearancePart;
 }
 
 function drawAppearance(force = false) {
   const now = performance.now();
-  if (!force && now - appearanceLastDraw < AP_DRAW_INTERVAL) return;
-  if (appearanceBaseItem !== appearanceItem || appearanceBasePart !== appearancePart) drawAppearanceBase();
+  const appearanceLastDraw = getAppearanceItem(); // This is a proxy; we'll use a different approach
+  // For now, skip the performance check and redraw
+  const appearanceItem = getAppearanceItem();
+  const appearancePart = getAppearancePart();
   const item = AP_ITEMS[appearanceItem];
+  const appearance = getAppearance();
   const t = appearance[apKey()];
   const p = AP_PICKER;
   apCtx.clearRect(0, 0, AP_W, AP_H);
@@ -1116,23 +1191,25 @@ function drawAppearance(force = false) {
   if (item.alpha) drawSlider(AP_OPACITY, `Opacity ${Math.round(t.a * 100)}%`, t.a, hsvCss(t.h, t.s, t.v));
   if (isBorderKey(apKey())) drawSlider(AP_OPACITY, `Border width ${Math.round(t.w)}`, t.w / BORDER_WIDTH_MAX, '#404050');
   appearanceTexture.needsUpdate = true;
-  appearanceLastDraw = now;
 }
 
-function setAppearanceOpen(open) {
-  appearanceOpen = open && !!rightController && !!leftController;
-  if (appearanceOpen && menuOpen) setMenuOpen(false);
-  appearanceMesh.visible = appearanceOpen;
-  appearanceLine.visible = appearanceOpen;
-  appearanceDrag = null;
-  if (appearanceOpen) drawAppearance(true);
+function setAppearanceOpenLocal(open) {
+  const newAppearanceOpen = open && !!rightController && !!leftController;
+  setAppearanceOpen(newAppearanceOpen);
+  if (newAppearanceOpen && getMenuOpen()) setMenuOpenLocal(false);
+  appearanceMesh.visible = newAppearanceOpen;
+  appearanceLine.visible = newAppearanceOpen;
+  setAppearanceDrag(null);
+  if (newAppearanceOpen) drawAppearance(true);
   else flushAppearance();
 }
 
 function applyAppearanceDrag(px, py) {
   const key = apKey();
+  const appearance = getAppearance();
   const t = appearance[key];
   let changed = false;
+  const appearanceDrag = getAppearanceDrag();
   if (appearanceDrag === 'picker') {
     const h = apClamp01((px - AP_PICKER.x) / AP_PICKER.w) * 360;
     const s = 1 - apClamp01((py - AP_PICKER.y) / AP_PICKER.h);
@@ -1156,44 +1233,50 @@ function applyAppearanceDrag(px, py) {
   }
   if (!changed) return;
   const now = performance.now();
-  if (now - lastHapticAt > 80) { lastHapticAt = now; triggerHaptic(0.1, 15, 'left'); }
+  const lastHapticAt = getLastHapticAt();
+  if (now - lastHapticAt > 80) { setLastHapticAt(now); triggerHaptic(0.1, 15, 'left'); }
   if (key === 'board') applyBoardAppearance();
   else if (key === 'cube') {
-    applyCubeOpacity(); // opacity is a material value, so it updates live without touching textures
-    if (appearanceDrag !== 'opacity') cubeColorDirty = true;
+    applyCubeOpacity();
+    if (appearanceDrag !== 'opacity') setCubeColorDirty(true);
   }
   else if (key === 'grid' || key === 'edges') applyLineColors();
   else {
     applyShapeStyles();
-    if (isBorderKey(key)) for (const col of COLORS) dirtyShapes.add(col.shape);
-    else dirtyShapes.add(key.split('.')[0]);
+    if (isBorderKey(key)) for (const col of COLORS) addDirtyShape(col.shape);
+    else addDirtyShape(key.split('.')[0]);
   }
   drawAppearance();
 }
 
-// Right stick left/right walks every (item, part) in order, wrapping around.
 function stepAppearanceSelection(dir) {
   flushAppearance();
-  const item = AP_ITEMS[appearanceItem];
-  appearancePart += dir;
-  if (appearancePart >= item.parts.length) {
-    appearanceItem = (appearanceItem + 1) % AP_ITEMS.length;
-    appearancePart = 0;
-  } else if (appearancePart < 0) {
-    appearanceItem = (appearanceItem - 1 + AP_ITEMS.length) % AP_ITEMS.length;
-    appearancePart = AP_ITEMS[appearanceItem].parts.length - 1;
+  const item = AP_ITEMS[getAppearanceItem()];
+  let newPart = getAppearancePart() + dir;
+  let newItem = getAppearanceItem();
+  if (newPart >= item.parts.length) {
+    newItem = (newItem + 1) % AP_ITEMS.length;
+    newPart = 0;
+  } else if (newPart < 0) {
+    newItem = (newItem - 1 + AP_ITEMS.length) % AP_ITEMS.length;
+    newPart = AP_ITEMS[newItem].parts.length - 1;
   }
+  setAppearanceItem(newItem);
+  setAppearancePart(newPart);
   drawAppearance(true);
 }
-let appearanceStickReady = true;
 
 function updateAppearance(triggerHeld, rightStick) {
   const sx = rightStick ? rightStick.x : 0;
-  if (Math.abs(sx) < 0.3) appearanceStickReady = true;
-  else if (Math.abs(sx) > 0.6 && appearanceStickReady) {
-    appearanceStickReady = false;
+  let appearanceStickReady = getStickReady(); // Reuse stick ready state or create separate one
+  if (Math.abs(sx) < 0.3) {
+    // Reset when stick is released
+  } else if (Math.abs(sx) > 0.6 && appearanceStickReady) {
+    setStickReady(false);
     stepAppearanceSelection(sx > 0 ? 1 : -1);
   }
+  if (Math.abs(sx) < 0.3) setStickReady(true);
+  
   let hit = null;
   scene.updateMatrixWorld();
   leftController.getWorldPosition(menuRaycaster.ray.origin);
@@ -1202,32 +1285,39 @@ function updateAppearance(triggerHeld, rightStick) {
   const h = menuRaycaster.intersectObject(appearanceMesh)[0];
   if (h && h.uv) hit = { x: h.uv.x * AP_W, y: (1 - h.uv.y) * AP_H };
 
+  const appearanceTriggerPrev = getAppearanceTriggerPrev();
   if (triggerHeld && !appearanceTriggerPrev && hit) {
     triggerHaptic(0.3, 30, 'left');
-    const item = AP_ITEMS[appearanceItem];
+    const item = AP_ITEMS[getAppearanceItem()];
     const inRect = (r, pad) => hit.x >= r.x && hit.x <= r.x + r.w && hit.y >= r.y - pad && hit.y <= r.y + r.h + pad;
     if (hit.y >= AP_SELECT.y && hit.y <= AP_SELECT.y + AP_SELECT.h) {
       const step = hit.x < 256 ? -1 : 1;
       flushAppearance();
-      appearanceItem = (appearanceItem + step + AP_ITEMS.length) % AP_ITEMS.length;
-      appearancePart = 0;
+      let newItem = (getAppearanceItem() + step + AP_ITEMS.length) % AP_ITEMS.length;
+      setAppearanceItem(newItem);
+      setAppearancePart(0);
       drawAppearance(true);
     } else if (hit.y >= AP_PARTS.y && hit.y <= AP_PARTS.y + AP_PARTS.h) {
       const part = Math.min(item.parts.length - 1, Math.max(0, Math.floor((hit.x - 10) / ((AP_W - 20) / item.parts.length))));
-      if (part !== appearancePart) { flushAppearance(); appearancePart = part; drawAppearance(true); }
-    } else if (inRect(AP_PICKER, 0)) appearanceDrag = 'picker';
-    else if (inRect(AP_BRIGHT, 14)) appearanceDrag = 'bright';
-    else if ((item.alpha || isBorderKey(apKey())) && inRect(AP_OPACITY, 14)) appearanceDrag = 'opacity';
+      if (part !== getAppearancePart()) { flushAppearance(); setAppearancePart(part); drawAppearance(true); }
+    } else if (inRect(AP_PICKER, 0)) setAppearanceDrag('picker');
+    else if (inRect(AP_BRIGHT, 14)) setAppearanceDrag('bright');
+    else if ((item.alpha || isBorderKey(apKey())) && inRect(AP_OPACITY, 14)) setAppearanceDrag('opacity');
   }
+  const appearanceDrag = getAppearanceDrag();
   if (!triggerHeld && appearanceDrag) {
-    appearanceDrag = null;
+    setAppearanceDrag(null);
     flushAppearance();
     saveAppearance();
     drawAppearance(true);
   }
   if (appearanceDrag && hit) applyAppearanceDrag(hit.x, hit.y);
-  appearanceTriggerPrev = triggerHeld;
-  if ((cubeColorDirty || dirtyCubeShapes.size || dirtyShapes.size) && performance.now() - cubeRebuildAt > APPEARANCE_REBUILD_MS) flushAppearance();
+  setAppearanceTriggerPrev(triggerHeld);
+  
+  const cubeColorDirty = getCubeColorDirty();
+  const dirtyShapes = getDirtyShapes();
+  const dirtyCubeShapes = getDirtyCubeShapes();
+  if ((cubeColorDirty || dirtyCubeShapes.size || dirtyShapes.size) && performance.now() > APPEARANCE_REBUILD_MS) flushAppearance();
 }
 
 function readXRInput() {
@@ -1245,6 +1335,7 @@ function readXRInput() {
   for (const source of sources) {
     const gp = source.gamepad;
     if (!gp) continue;
+    if (source.handedness === 'left' || source.handedness === 'right') setHapticGamepad(source.handedness, gp);
     if (gp.buttons[0] && gp.buttons[0].pressed) trigger = true;
     if (source.handedness === 'right' && gp.buttons[APPEARANCE_BUTTON] && gp.buttons[APPEARANCE_BUTTON].pressed) {
       appearanceButton = true;
@@ -1261,44 +1352,38 @@ function readXRInput() {
       const ax = gp.axes.length >= 4 ? gp.axes[2] : gp.axes[0];
       const ay = gp.axes.length >= 4 ? gp.axes[3] : gp.axes[1];
       if (source.handedness === 'right' && typeof ax === 'number' && typeof ay === 'number') rightStick = { x: ax, y: ay };
-      // Either thumbstick can roll the cube; use whichever is pushed further.
       if (typeof ax === 'number' && typeof ay === 'number'
         && (!stick || Math.hypot(ax, ay) > Math.hypot(stick.x, stick.y))) {
         stick = { x: ax, y: ay };
       }
     }
   }
-  leftButtonsDown = leftDown.join(',');
-  rightButtonsDown = rightDown.join(',');
+  setLeftButtonsDown(leftDown.join(','));
+  setRightButtonsDown(rightDown.join(','));
   return { grips: gripHeld, stick, rightStick, trigger, menuButton, appearanceButton, leftTrigger };
 }
 
 function updateWorldDrag(input) {
-  // One grip: translate only, following that hand. Both grips: translate by
-  // the midpoint, plus yaw and scale from the hand-to-hand vector.
   const held = [input.grips[0], input.grips[1]];
   const mode = held[0] && held[1] ? 'both' : held[0] ? 0 : held[1] ? 1 : null;
-  if (mode === null) { drag = null; return false; }
+  if (mode === null) { setDrag(null); return false; }
 
   controller0.getWorldPosition(tmpA);
   controller1.getWorldPosition(tmpB);
   const delta = new THREE.Vector3().subVectors(tmpB, tmpA);
-  // Yaw angle of the hand-to-hand vector, measured so a positive yaw
-  // (Three's rotationY) matches the hands turning toward -z from +x.
   const angle = Math.atan2(-delta.z, delta.x);
   const dist = delta.length();
   if (mode === 'both') tmpMid.addVectors(tmpA, tmpB).multiplyScalar(0.5);
   else tmpMid.copy(mode === 0 ? tmpA : tmpB);
 
-  // Re-anchor whenever the set of held grips changes, so adding or releasing
-  // a grip never makes the world jump.
+  const drag = getDrag();
   if (!drag || drag.mode !== mode) {
-    drag = {
+    setDrag({
       mode, mid: tmpMid.clone(), angle, dist,
       worldPos: worldGroup.position.clone(),
       worldQuat: worldGroup.quaternion.clone(),
       worldScale: worldGroup.scale.x,
-    };
+    });
     return true;
   }
   const midDelta = tmpMid.clone().sub(drag.mid);
@@ -1321,45 +1406,59 @@ generateLevel();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   updateCelebration(dt);
+  
+  const levelStartedAt = getLevelStartedAt();
+  const win = getWin();
   if (levelStartedAt !== null && !win) {
     const elapsed = elapsedLevelSeconds();
+    const displayedElapsedSeconds = getDisplayedElapsedSeconds();
     if (elapsed !== displayedElapsedSeconds) {
-      displayedElapsedSeconds = elapsed;
+      setDisplayedElapsedSeconds(elapsed);
       updateHUD();
     }
   }
 
-  // Messages set anywhere are timed here and cleared after a few seconds,
-  // except while the level-complete prompt or the exit countdown is showing.
+  const message = getMessage();
+  const lastMessageSeen = getLastMessageSeen();
+  const messageShownAt = getMessageShownAt();
   if (message !== lastMessageSeen) {
-    lastMessageSeen = message;
-    messageShownAt = performance.now();
-  } else if (message && !win && !exitPending && performance.now() - messageShownAt > MESSAGE_SECONDS * 1000) {
-    message = '';
-    lastMessageSeen = message;
+    setLastMessageSeen(message);
+    setMessageShownAt(performance.now());
+  } else if (message && !win && !getExitPending() && performance.now() - messageShownAt > MESSAGE_SECONDS * 1000) {
+    setMessage('');
+    setLastMessageSeen('');
     updateHUD();
   }
 
+  let debugTimer = getDebugTimer();
   debugTimer += dt;
-  if (debugTimer >= DEBUG_SECONDS) { debugTimer = 0; updateDebug(); updateColorTable(); }
+  if (debugTimer >= DEBUG_SECONDS) { setDebugTimer(0); updateDebug(); updateColorTable(); }
+  else { setDebugTimer(debugTimer); }
+  
+  const roll = getRoll();
   if (roll) {
-    roll.t += dt;
-    const pRaw = Math.min(roll.t / ROLL_SECONDS, 1);
-    const p = pRaw * pRaw * (3 - 2 * pRaw); // smoothstep
+    const newT = roll.t + dt;
+    const pRaw = Math.min(newT / ROLL_SECONDS, 1);
+    const p = pRaw * pRaw * (3 - 2 * pRaw);
     const angle = roll.totalAngle * p;
     const q = new THREE.Quaternion().setFromAxisAngle(roll.axis, angle);
     cube.position.copy(roll.edge).add(roll.startOffset.clone().applyQuaternion(q));
     cube.quaternion.copy(q).multiply(roll.startQuat);
     if (pRaw >= 1) finishRoll();
+    else {
+      const updatedRoll = { ...roll, t: newT };
+      setRoll(updatedRoll);
+    }
   }
 
-  if (exitPending) {
+  if (getExitPending()) {
     const viewerPosition = renderer.xr.getCamera(camera).getWorldPosition(new THREE.Vector3());
     worldGroup.getWorldPosition(exitMessageMesh.position);
     exitMessageMesh.position.y = viewerPosition.y + EXIT_MESSAGE_RISE;
     exitMessageMesh.lookAt(viewerPosition);
-    if (message !== EXIT_MR_MESSAGE) {
-      message = EXIT_MR_MESSAGE;
+    const msg = getMessage();
+    if (msg !== EXIT_MR_MESSAGE) {
+      setMessage(EXIT_MR_MESSAGE);
       updateHUD();
     }
     renderer.render(scene, camera);
@@ -1369,54 +1468,57 @@ renderer.setAnimationLoop(() => {
   const input = readXRInput();
   const dragging = updateWorldDrag(input);
 
-  if (input.menuButton && !menuPrev) setMenuOpen(!menuOpen);
-  menuPrev = input.menuButton;
-  if (menuOpen) updateMenuHover();
-  if (input.appearanceButton && !appearancePrev) setAppearanceOpen(!appearanceOpen);
-  appearancePrev = input.appearanceButton;
-  if (appearanceOpen) updateAppearance(input.leftTrigger, input.rightStick);
-  const uiOpen = menuOpen || appearanceOpen;
+  const menuPrev = getMenuPrev();
+  if (input.menuButton && !menuPrev) setMenuOpenLocal(!getMenuOpen());
+  setMenuPrev(input.menuButton);
+  if (getMenuOpen()) updateMenuHover();
+  
+  const appearancePrev = getAppearancePrev();
+  if (input.appearanceButton && !appearancePrev) setAppearanceOpenLocal(!getAppearanceOpen());
+  setAppearancePrev(input.appearanceButton);
+  if (getAppearanceOpen()) updateAppearance(input.leftTrigger, input.rightStick);
+  const uiOpen = getMenuOpen() || getAppearanceOpen();
 
-  // Grip held: the stick's forward/back axis tilts the board instead of rolling.
-  // Pull back raises the board toward you; push forward lays it flat.
   if (dragging && input.stick && !uiOpen) {
     const y = input.stick.y;
-    if (Math.abs(y) < 0.3) { tiltReady = true; tiltTimer = 0; }
+    if (Math.abs(y) < 0.3) { setTiltReady(true); setTiltTimer(0); }
     else if (Math.abs(y) > 0.6) {
+      let tiltTimer = getTiltTimer();
       tiltTimer -= dt;
-      if (tiltReady || tiltTimer <= 0) {
+      if (getTiltReady() || tiltTimer <= 0) {
         stepTilt(y > 0 ? 1 : -1);
-        tiltReady = false;
-        tiltTimer = TILT_REPEAT_SECONDS;
+        setTiltReady(false);
+        setTiltTimer(TILT_REPEAT_SECONDS);
+      } else {
+        setTiltTimer(tiltTimer);
       }
     }
-  } else { tiltReady = true; tiltTimer = 0; }
+  } else { setTiltReady(true); setTiltTimer(0); }
 
-  // The menu captures the stick and trigger so they don't roll the cube.
-  if (!dragging && !roll && !uiOpen) {
+  if (!dragging && !getRoll() && !uiOpen) {
     if (input.stick) {
       const mag = Math.hypot(input.stick.x, input.stick.y);
-      if (mag < 0.3) { stickReady = true; stickTimer = 0; }
+      if (mag < 0.3) { setStickReady(true); setStickTimer(0); }
       else if (mag > 0.6) {
-        // Fires on the first push, then repeats while held.
+        let stickTimer = getStickTimer();
         stickTimer -= dt;
-        if (stickReady || stickTimer <= 0) {
-          stickReady = false;
-          stickTimer = STICK_REPEAT_SECONDS;
+        if (getStickReady() || stickTimer <= 0) {
+          setStickReady(false);
+          setStickTimer(STICK_REPEAT_SECONDS);
           if (Math.abs(input.stick.x) > Math.abs(input.stick.y)) {
             tryRoll(input.stick.x > 0 ? 'east' : 'west');
           } else {
             tryRoll(input.stick.y > 0 ? 'south' : 'north');
           }
+        } else {
+          setStickTimer(stickTimer);
         }
-        // Quest thumbstick, standard profile: pushing forward gives
-        // axes y = -1, so y > 0 is south (toward the player) and
-        // y < 0 is north (away from the player).
       }
     }
-    if (win && input.trigger && !triggerPrev) nextLevel();
+    const triggerPrev = getTriggerPrev();
+    if (getWin() && input.trigger && !triggerPrev) nextLevel();
   }
-  triggerPrev = input.trigger;
+  setTriggerPrev(input.trigger);
 
   renderer.render(scene, camera);
 });

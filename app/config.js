@@ -1,4 +1,6 @@
 // Configuration constants for Cube Game WebXR
+// Fixed build: 2026-11-04 refactor01-fixed (see ../FIXES.md)
+export const BUILD_LABEL = '2026-11-04 refactor01-fixed2'; // fallback only: the HUD date comes from Last-Modified headers (see buildTime.js)
 // Updated: scale 2 for desktop
 
 // Board and grid
@@ -30,7 +32,7 @@ export const INITIAL_ORIENTATION = { up: 2, down: 5, north: 1, south: 3, east: 0
 // Board appearance
 export const BOARD_COLOR = '#000584';
 export const BOARD_OPACITY = 0.34;
-export const GRID_COLOR = 0x01003b;
+export const GRID_COLOR = 0xfff005; // yellow, as actually rendered (was dark navy, unused)
 export const CUBE_FACE_BLUE = '#036500';
 export const CUBE_OPACITY = 0.6;
 export const CUBE_EDGE_COLOR = '#055200';
