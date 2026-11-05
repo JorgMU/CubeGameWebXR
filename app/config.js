@@ -48,7 +48,7 @@ export const SHAPE_BORDER_WIDTH = 4; // px on the 256 px icon texture
 
 // World positioning
 export const HOMES = {
-  desktop: { position: { x: 0, y: 0.5, z: -2.0 }, tilt: 0, scale: 2 },
+  desktop: { position: { x: 0, y: 0.5, z: -3.0 }, tilt: 20, scale: 3.22 },
   mr: { position: { x: 0, y: -0.1, z: -1.75 }, tilt: 30, scale: 0.75 },
 };
 
