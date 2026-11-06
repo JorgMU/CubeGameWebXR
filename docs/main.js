@@ -10,7 +10,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // Import configuration
 import { CELL, CUBE, BOARD_DEPTH, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS } from './config.js';
 // v30: the session defaults (board layout, homes, appearance, skybox)
-// moved to app/sessionConfig.js; GRID, BOARD_SIZE, COLORED_FRACTION,
+// moved to docs/sessionConfig.js; GRID, BOARD_SIZE, COLORED_FRACTION,
 // ROLL_SECONDS, HOMES and the appearance colours used to be imported
 // from config.js and are now read from SESSION_DEFAULTS.
 import { SESSION_DEFAULTS } from './sessionConfig.js';
@@ -1229,7 +1229,7 @@ document.getElementById('btnRotateRight').addEventListener('click', rotateRight)
 // --- Copy settings (2D only) ------------------------------------------------
 // A 2D HUD button that copies the current settings as ECMAScript:
 // `export const SESSION_DEFAULTS = { ... }`, ready to paste into
-// app/sessionConfig.js. Colours are hex, as in config.js. In 2D the
+// docs/sessionConfig.js. Colours are hex, as in config.js. In 2D the
 // page is focused and the click is a user gesture, so
 // navigator.clipboard.writeText() works there — inside an immersive
 // session it does not reliably (no page focus, and a controller trigger
@@ -1302,7 +1302,7 @@ function buildSessionConfigScript() {
   lines.push('// CubeGameWebXR session defaults — copied ' + new Date().toISOString());
   lines.push('// Build: ' + BUILD_TIMESTAMP + ' — Level ' + getLevel() + ', ' + getRemaining() + ' remaining, face down ' + COLORS[orientation.down].name);
   lines.push('// These are the live values (saved appearance included). Paste into');
-  lines.push('// app/sessionConfig.js to make them the defaults — but note the saved');
+  lines.push('// docs/sessionConfig.js to make them the defaults — but note the saved');
   lines.push('// appearance in this browser still wins until it is cleared.');
   lines.push('export const SESSION_DEFAULTS = {');
   lines.push('  // Board layout — geometry shared by 2D and MR');
@@ -1843,7 +1843,7 @@ const AP_ITEMS = [
   })),
 ];
 
-// v30: the default values moved to app/sessionConfig.js
+// v30: the default values moved to docs/sessionConfig.js
 // (SESSION_DEFAULTS.appearance); this only converts them from hex to
 // the HSV the panel works in, then merges the saved appearance over
 // them, as before.

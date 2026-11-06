@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
-// v30: the home poses moved to app/sessionConfig.js
+// v30: the home poses moved to docs/sessionConfig.js
 // (SESSION_DEFAULTS.boardHome_2D / .boardHome_MR).
 import { SESSION_DEFAULTS } from './sessionConfig.js';
 

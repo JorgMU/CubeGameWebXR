@@ -15,7 +15,7 @@
 #
 # Usage (run by StartCubeGameWebXR.ps1, or by hand):
 #   py CubeGameWebXRServer.py [port] [bind] [directory]
-# Defaults: port 8001, bind 127.0.0.1, directory ./app
+# Defaults: port 8001, bind 127.0.0.1, directory ./docs
 import http.server
 import sys
 from functools import partial
@@ -30,7 +30,7 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8001
     bind = sys.argv[2] if len(sys.argv) > 2 else "127.0.0.1"
-    directory = sys.argv[3] if len(sys.argv) > 3 else "app"
+    directory = sys.argv[3] if len(sys.argv) > 3 else "docs"
     handler = partial(NoCacheHandler, directory=directory)
     with http.server.ThreadingHTTPServer((bind, port), handler) as httpd:
         print(f"Serving {directory} on http://{bind}:{port} (Cache-Control: no-store)")

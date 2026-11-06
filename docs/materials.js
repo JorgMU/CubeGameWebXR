@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-// v30: the appearance defaults moved to app/sessionConfig.js
+// v30: the appearance defaults moved to docs/sessionConfig.js
 // (SESSION_DEFAULTS.appearance); the material factories read them
 // from there now instead of from config.js.
 import { SESSION_DEFAULTS } from './sessionConfig.js';

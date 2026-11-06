@@ -9,7 +9,7 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
   surface (`BOARD_COLOR` `#000584`, `BOARD_OPACITY`) with black grid lines
   (`GRID_COLOR` `0x000000`), so it tints the background behind it. The board is
   about 3.09 m wide and 2.0 m deep, so each cell is about 0.182 m — to change
-  the board, change `cols` / `rows` / `boardSize` in `app/sessionConfig.js`,
+  the board, change `cols` / `rows` / `boardSize` in `docs/sessionConfig.js`,
   not `CELL`, and the cells, cube, and icons will scale with it.
 - A cube has dark-grey faces (`CUBE_FACE_COLOR` `#222222`) at 40% opacity
   (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
@@ -140,7 +140,7 @@ and Purple west.
   board). The **Reset Home** button does the same. In a session the headset
   owns the camera, so there it resets the board only.
   Home poses for 2D and MR are the `boardHome_2D` / `boardHome_MR`
-  sections of `app/sessionConfig.js`; the MR one is used by the Quest
+  sections of `docs/sessionConfig.js`; the MR one is used by the Quest
   "Reset Home" menu item and when a session starts.
 - *: show/hide the debug readout (small grey text; see "Debug readout" below).
   The **Show Debug** button in the top-right button bar does the same, and also
@@ -170,12 +170,12 @@ and Purple west.
   (desktop home pose), `boardHome_MR` (Quest home pose), `appearance`
   (everything the B-button panel edits, colours as hex), and `skybox`
   (current mode only). Paste it
-  into `app/sessionConfig.js` to make the values the defaults. If the
+  into `docs/sessionConfig.js` to make the values the defaults. If the
   clipboard write fails, the text is shown in a box with its own Copy button
   instead.
 - Reset Colors (2D only): the **Reset Colors** button in the top-right
   bar, or the **O** key, clears the saved appearance from `localStorage`
-  and rebuilds it from the server defaults in `app/sessionConfig.js`;
+  and rebuilds it from the server defaults in `docs/sessionConfig.js`;
   the sky returns to the session default too. Asks for confirmation;
   no undo. The top-10 scores are not touched.
 - Reset Home: the **Reset Home** button, or the **H** key (or 0),
@@ -199,7 +199,7 @@ CubeGameWebXR/                  repo root
   .gitignore                    not served
   StartCubeGameWebXR.ps1        not served (run from repo root)
   StopCubeGameWebXR.ps1         not served
-  app/                          <-- web root: only this is served
+  docs/                          <-- web root: only this is served
     index.html                  served
     main.js                     served (loaded by index.html as ./main.js)
     config.js                   served (code constants, derived values, storage keys)
@@ -218,10 +218,10 @@ CubeGameWebXR/                  repo root
       starmap_2020_4k_raw.jpg   served (unadjusted sky fallback)
 ```
 
-## Session defaults — `app/sessionConfig.js`
+## Session defaults — `docs/sessionConfig.js`
 
 The settings a fresh load starts from live in one file,
-`app/sessionConfig.js`, as `SESSION_DEFAULTS`: `boardLayout`
+`docs/sessionConfig.js`, as `SESSION_DEFAULTS`: `boardLayout`
 (columns, rows, board width, coloured fraction, roll time), `boardHome_2D`
 and `boardHome_MR` (position, tilt, scale), `appearance`
 (everything the B-button panel edits, colours as hex) and
@@ -235,11 +235,11 @@ Colors** button in the 2D top-right bar clears the saved
 appearance and restores these values (scores are not touched).
 
 
-`app/index.html`, `app/main.js` and its modules, and the sky images in `app/Assets/` need
-to be served. Icons are drawn on canvas in `app/textures.js`, and
+`docs/index.html`, `docs/main.js` and its modules, and the sky images in `docs/Assets/` need
+to be served. Icons are drawn on canvas in `docs/textures.js`, and
 Three.js r160 is loaded from a CDN via an import map in `index.html`.
 If you add assets later (textures, sounds, models), put them under
-`app/` — for example `app/Assets/` — so their relative URLs keep working
+`docs/` — for example `docs/Assets/` — so their relative URLs keep working
 from `index.html`.
 
 ## Sky background
@@ -275,13 +275,13 @@ loads.
 
 ## Run it
 
-No build step. `app/index.html` loads Three.js r160 from a CDN via an
+No build step. `docs/index.html` loads Three.js r160 from a CDN via an
 import map, so you need internet access the first time it loads.
 
 ### Option A — the included PowerShell scripts (recommended for Quest)
 
 This is the same pattern as the EarthAndMoon scripts: scripts at the
-repo root, app folder beside them.
+repo root, docs folder beside them.
 
 ```powershell
 cd CubeGameWebXR
@@ -293,7 +293,7 @@ Requirements: Python launcher `py` in PATH, and `cloudflared` in PATH
 (`winget install Cloudflare.cloudflared`).
 
 What Start does:
-- Serves only `app/` with `py -m http.server` on port **8001**, bound to
+- Serves only `docs/` with `py -m http.server` on port **8001**, bound to
   127.0.0.1 so it is not exposed on your LAN (the tunnel reaches it locally).
   (8001, not 8000, so it can run alongside EarthAndMoon on 8000).
 - Starts `cloudflared tunnel --url http://127.0.0.1:8001` and prints the
@@ -311,7 +311,7 @@ Stop kills both PIDs from that state file and removes the state file.
 From the repo root:
 
 ```powershell
-py -m http.server 8001 --directory app
+py -m http.server 8001 --directory docs
 ```
 
 Then open `http://localhost:8001` on desktop for logic testing. For the
@@ -329,7 +329,7 @@ things make a changed file actually show up:
   the tunnel cache files by Last-Modified heuristics. With no-store,
   every load goes to disk, so a normal reload or a new tab works.
 - **The loader re-reads every file from the server.** The inline loader
-  in `app/index.html` fetches all 9 served files with `cache: 'reload'`
+  in `docs/index.html` fetches all 9 served files with `cache: 'reload'`
   (true Last-Modified, and the fresh copies are put in the cache, so
   `main.js`'s imports load fresh too), then loads
   `main.js?v=<newest Last-Modified>`. There is no `location.reload()` in
@@ -368,17 +368,17 @@ numbers; what you see is the difference between them.
 
 ## Files
 
-- `app/index.html` — page, HUD, import map for Three.js, loads `main.js`.
-- `app/main.js` — game flow: board, cube orientation and rolling
+- `docs/index.html` — page, HUD, import map for Three.js, loads `main.js`.
+- `docs/main.js` — game flow: board, cube orientation and rolling
   animation, flat icons, level generation, thumbstick/grip input,
   appearance/menu panels, scores, and the in-world status text (tilted
   up past the far edge, as wide as the board at 3.09 m, its bottom edge level with the
   board, filled with the board face colour, with a grid-line border
   and a divider between the status lines and the message),
   and the sky background. Shared state lives in
-  `app/state.js`; constants and colours in `app/config.js`; the cube
-  (six separate face planes) in `app/cube.js`.
-- `app/Assets/starmap_2020_{8k,4k}[_raw].jpg` — the sky star maps (adjusted and raw; 8k preferred, 4k fallback).
+  `docs/state.js`; constants and colours in `docs/config.js`; the cube
+  (six separate face planes) in `docs/cube.js`.
+- `docs/Assets/starmap_2020_{8k,4k}[_raw].jpg` — the sky star maps (adjusted and raw; 8k preferred, 4k fallback).
 - `StartCubeGameWebXR.ps1` / `StopCubeGameWebXR.ps1` — local server +
   Cloudflare tunnel for Quest testing (repo root, not served).
 

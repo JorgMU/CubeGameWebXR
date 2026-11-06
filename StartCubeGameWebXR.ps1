@@ -1,6 +1,6 @@
-# Serves the app/ subfolder only — the same pattern as the EarthAndMoon
+# Serves the docs/ subfolder only — the same pattern as the EarthAndMoon
 # pair, which served EarthAndMoonWebXR beside the scripts. Run from the
-# repo root (CubeGameWebXR). Only files in app/ are reachable via the
+# repo root (CubeGameWebXR). Only files in docs/ are reachable via the
 # web server; README, scripts, and .gitignore stay out of the web root.
 param(
     [int]$Port = 8001
@@ -9,10 +9,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$appDir = Join-Path $scriptRoot 'app'
+$docsDir = Join-Path $scriptRoot 'docs'
 
-if (-not (Test-Path -Path $appDir -PathType Container)) {
-    throw "App folder not found: $appDir"
+if (-not (Test-Path -Path $docsDir -PathType Container)) {
+    throw "Docs folder not found: $docsDir"
 }
 
 $pythonCmd = Get-Command py -ErrorAction SilentlyContinue
@@ -76,7 +76,7 @@ $serverScript = Join-Path $scriptRoot 'CubeGameWebXRServer.py'
 if (-not (Test-Path -Path $serverScript)) {
     throw "Server script not found: $serverScript"
 }
-$serverArgs = @($serverScript, $Port, '127.0.0.1', $appDir)
+$serverArgs = @($serverScript, $Port, '127.0.0.1', $docsDir)
 $server = Start-Process -FilePath 'py' -ArgumentList $serverArgs -WorkingDirectory $scriptRoot -WindowStyle Minimized -PassThru
 
 $tunnelUrl = "http://127.0.0.1:$Port"
@@ -84,7 +84,7 @@ $tunnelArgs = @('tunnel', '--url', $tunnelUrl)
 $tunnel = Start-Process `
     -FilePath 'cloudflared' `
     -ArgumentList $tunnelArgs `
-    -WorkingDirectory $appDir `
+    -WorkingDirectory $docsDir `
     -WindowStyle Minimized `
     -RedirectStandardOutput $cloudflaredLogFile `
     -RedirectStandardError $cloudflaredErrorLogFile `
@@ -114,7 +114,7 @@ while ($watch.Elapsed -lt $timeout -and -not $publicUrl) {
 
 $state = [ordered]@{
     Port = $Port
-    AppDir = $appDir
+    DocsDir = $docsDir
     ServerPid = $server.Id
     TunnelPid = $tunnel.Id
     CloudflaredLogFile = $cloudflaredLogFile

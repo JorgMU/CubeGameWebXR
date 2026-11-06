@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { COLORS } from './config.js';
-// v30: the shape-border defaults moved to app/sessionConfig.js
+// v30: the shape-border defaults moved to docs/sessionConfig.js
 // (SESSION_DEFAULTS.appearance.shapeBorder).
 import { SESSION_DEFAULTS } from './sessionConfig.js';
 

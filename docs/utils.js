@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CELL } from './config.js';
-// v30: the board layout moved to app/sessionConfig.js
+// v30: the board layout moved to docs/sessionConfig.js
 // (SESSION_DEFAULTS.boardLayout.cols / .rows).
 import { SESSION_DEFAULTS } from './sessionConfig.js';
 

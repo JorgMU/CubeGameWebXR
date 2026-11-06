@@ -1,14 +1,14 @@
 // Configuration constants for Cube Game WebXR
 // Fixed build: 2026-11-04 refactor01-fixed (see ../FIXES.md)
 // v30: the session defaults (board layout, homes, appearance, skybox)
-// moved to app/sessionConfig.js; this file keeps the code constants
+// moved to docs/sessionConfig.js; this file keeps the code constants
 // and derives the values that depend on the session defaults.
 import { SESSION_DEFAULTS } from './sessionConfig.js';
 export const BUILD_LABEL = '2026-11-04 refactor01-fixed2'; // fallback only: the HUD date comes from Last-Modified headers (see buildTime.js)
 // Updated Nov 5, 2026 (v17): desktop home is further away, tilted and larger
 
 // Board and grid — v30: the board layout moved to
-// app/sessionConfig.js (SESSION_DEFAULTS.boardLayout). CELL, CUBE
+// docs/sessionConfig.js (SESSION_DEFAULTS.boardLayout). CELL, CUBE
 // and BOARD_DEPTH are still derived here from it. v40: the board is
 // rectangular (cols across, rows deep), so CELL comes from the width
 // and the depth follows from the cell size.
@@ -16,7 +16,7 @@ export const CELL = SESSION_DEFAULTS.boardLayout.boardSize / SESSION_DEFAULTS.bo
 export const CUBE = CELL;
 export const BOARD_DEPTH = CELL * SESSION_DEFAULTS.boardLayout.rows; // m, board depth (north-south)
 
-// Cube rolling — v30: moved to app/sessionConfig.js
+// Cube rolling — v30: moved to docs/sessionConfig.js
 // (SESSION_DEFAULTS.boardLayout.rollSeconds).
 
 // Starting position — derived from the session board layout
@@ -42,11 +42,11 @@ export const COLORS = [
 
 export const INITIAL_ORIENTATION = { up: 2, down: 5, north: 1, south: 3, east: 0, west: 4 };
 
-// Board appearance — v30: moved to app/sessionConfig.js
+// Board appearance — v30: moved to docs/sessionConfig.js
 // (SESSION_DEFAULTS.appearance: board, boardIcons, cube, cubeIcons,
 // grid, edges, shapeBorder).
 
-// World positioning — v30: moved to app/sessionConfig.js
+// World positioning — v30: moved to docs/sessionConfig.js
 // (SESSION_DEFAULTS.boardHome_2D / .boardHome_MR). scene.js and
 // main.js read them from there now.
 

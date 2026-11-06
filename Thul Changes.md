@@ -168,3 +168,23 @@ Not tested in a headset by Muse.
   13px) but as plain text — no border, no background. It is a page
   element, so it shows on desktop only, and it stays put when the
   HUD panel hides.
+
+## v41: app/ is docs/ now, for GitHub Pages
+
+- The served folder is renamed `app/` -> `docs/`, so the repo can
+  be published with GitHub Pages straight from the branch's /docs
+  folder. No game code changed — every import inside the folder is
+  relative, so the move is mechanical.
+- `StartCubeGameWebXR.ps1` serves `docs/` now (`$docsDir`, and the
+  state file records `DocsDir`); `CubeGameWebXRServer.py` defaults
+  to `./docs`. Local dev works exactly as before, on port 8001.
+- `README.md` paths, the in-game help text ("paste into
+  docs/sessionConfig.js") and the v30 move comments in config.js /
+  main.js all say `docs/` now.
+- Empty `docs/.nojekyll` added, so GitHub's default Jekyll
+  processing stays out of the way.
+- Still to do on the GitHub side: Settings -> Pages -> "Deploy
+  from a branch", branch main, folder /docs. The site will then be
+  https://jorgmu.github.io/CubeGameWebXR/ — and
+  .github/copilot-instructions.md needs its "Keep browser-served
+  assets under `app/`" line changed to `docs/`.
