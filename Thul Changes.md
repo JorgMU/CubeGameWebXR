@@ -1,8 +1,8 @@
 # Thul Changes — v40 (2026-11-06)
 
-Based on v39. `app/main.js` and `README.md` change (plus this
-note). `app/index.html`, `app/scene.js` and `sessionConfig.js` are
-unchanged.
+Based on v39. `docs/main.js` and `README.md` change (plus this
+note). `docs/index.html`, `docs/scene.js` and `sessionConfig.js` are
+unchanged. (Paths updated after the v41 `app/` -> `docs/` rename.)
 
 ## Status panel: filled, with a divider — and the text stays put
 

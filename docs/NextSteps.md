@@ -1,12 +1,12 @@
 # Next Steps
 
-## 1. Split `app/main.js` into ES modules
+## 1. Split `docs/main.js` into ES modules
 
 `main.js` is about 1,600 lines. Split it in small, verifiable steps and keep the current constraints:
 
 - No build step.
 - The Three.js r160 CDN import map in `index.html` stays unchanged.
-- All files stay under `app/`, and URLs stay relative to `index.html`.
+- All files stay under `docs/`, and URLs stay relative to `index.html`.
 
 ### Ground rules
 - Native `<script type="module" src="main.js">` and relative imports with the explicit `.js` extension (`import { COLORS } from './constants.js'`).

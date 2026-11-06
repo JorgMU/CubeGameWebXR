@@ -36,18 +36,18 @@
   },
   "currentSession": {
     "startupComplete": true,
-    "startedAt": "2026-11-05T18:10:34-06:00"
+    "startedAt": "2026-11-06T15:42:27-06:00"
   },
   "inputs": {
-    "primarySourceFile": "app/main.js",
-    "sourceDescription": "Contains the game logic; app/index.html is the page and module entry point."
+    "primarySourceFile": "docs/main.js",
+    "sourceDescription": "Contains the game logic; docs/index.html is the page and module entry point."
   },
   "workflow": {
     "step1": "Read README.md and the relevant app files before making changes.",
-    "step2": "Keep runtime assets under app/ and validate behavior in the documented desktop or Quest workflow."
+    "step2": "Keep runtime assets under docs/ and validate behavior in the documented desktop or Quest workflow."
   },
   "technicalNotes": {
-    "externalDataHandling": "Three.js r160 is loaded from jsDelivr; only app/ is served by the included local server.",
+    "externalDataHandling": "Three.js r160 is loaded from jsDelivr; only docs/ is served by the included local server.",
     "currentVersion": "Muse identifies HEAD 9b5dc13 as v5; v4 is the prior tagged commit 2157ab467123b3d4801b36f235bb01b23e3b91a6.",
     "gameGeometry": "11x11 grid on a 2.0 m board; CELL is derived as BOARD_SIZE / GRID. The cube starts in the center cell at column 5, row 5, and generated levels have at least 6 coloured cells.",
     "initialCubeOrientation": "Up Blue, down Orange, north Green, south Yellow, east Red, west Purple.",
@@ -60,7 +60,7 @@
   },
   "decisions": [
     "Repository visibility intent was explicitly declared public by the user.",
-    "Project purpose and primary source file were inferred from README.md and app/main.js."
+    "Project purpose and primary source file were inferred from README.md and docs/main.js."
   ],
   "openQuestions": [],
   "nextActions": [

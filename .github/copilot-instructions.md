@@ -10,9 +10,9 @@
 
 ## Repo-Specific Workflow Rules
 
-- Keep browser-served assets under `app/`; the local server intentionally exposes only that folder.
+- Keep browser-served assets under `docs/`; the local server intentionally exposes only that folder.
 - Preserve the no-build workflow and the Three.js r160 CDN import map unless the user requests a change.
-- Keep runtime asset URLs relative to `app/index.html` so they resolve from the web root.
+- Keep runtime asset URLs relative to `docs/index.html` so they resolve from the web root.
 
 ## Session Startup Protocol
 
