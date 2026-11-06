@@ -8,7 +8,7 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // Import build timestamp (calculated dynamically from file modification dates)
 
 // Import configuration
-import { CELL, CUBE, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS } from './config.js';
+import { CELL, CUBE, BOARD_DEPTH, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS } from './config.js';
 // v30: the session defaults (board layout, homes, appearance, skybox)
 // moved to app/sessionConfig.js; GRID, BOARD_SIZE, COLORED_FRACTION,
 // ROLL_SECONDS, HOMES and the appearance colours used to be imported
@@ -192,7 +192,7 @@ loadSky();
 
 // Transparent board: faint plane + grid lines.
 const boardPlane = new THREE.Mesh(
-  new THREE.PlaneGeometry(BOARD_LAYOUT.boardSize, BOARD_LAYOUT.boardSize),
+  new THREE.PlaneGeometry(BOARD_LAYOUT.boardSize, BOARD_DEPTH),
   new THREE.MeshBasicMaterial({ color: defAppearance.board.color, transparent: true, opacity: defAppearance.board.opacity, depthWrite: false, side: THREE.DoubleSide })
 );
 boardPlane.renderOrder = -0.5; // after the sky, before the icons, so it darkens only what is behind the board
@@ -203,8 +203,37 @@ worldGroup.add(boardPlane);
 // v30: the grid colour comes from the session defaults now (it used
 // to be GRID_COLOR from config.js); applyLineColors() still rewrites
 // the baked vertex colours at startup, so this is the initial colour.
+// v40: the board is rectangular (17 across, 11 deep), and GridHelper
+// only makes square grids — so the grid is built by hand as line
+// segments, one line per cell boundary, in the board plane. The
+// geometry carries a colour attribute like GridHelper's, so
+// applyLineColors() rewrites it the same way.
 const gridColorHex = parseInt(defAppearance.grid.color.slice(1), 16);
-const grid = new THREE.GridHelper(BOARD_LAYOUT.boardSize, BOARD_LAYOUT.grid, gridColorHex, gridColorHex);
+function buildGridGeometry() {
+  const cols = BOARD_LAYOUT.cols, rows = BOARD_LAYOUT.rows;
+  const w = BOARD_LAYOUT.boardSize, d = BOARD_DEPTH;
+  const positions = [];
+  for (let i = 0; i <= cols; i++) {
+    const x = -w / 2 + i * CELL;
+    positions.push(x, 0, -d / 2, x, 0, d / 2);
+  }
+  for (let j = 0; j <= rows; j++) {
+    const z = -d / 2 + j * CELL;
+    positions.push(-w / 2, 0, z, w / 2, 0, z);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const gc = new THREE.Color(gridColorHex);
+  const count = positions.length / 3;
+  const colors = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) { colors[i * 3] = gc.r; colors[i * 3 + 1] = gc.g; colors[i * 3 + 2] = gc.b; }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return geometry;
+}
+const grid = new THREE.LineSegments(
+  buildGridGeometry(),
+  new THREE.LineBasicMaterial({ vertexColors: true, color: 0xffffff })
+);
 grid.position.y = 0.005;
 worldGroup.add(grid);
 
@@ -223,8 +252,15 @@ worldGroup.add(cube);
 // --- In-world status text (tilted up beyond the far edge) ---
 // Past the north edge, tilted 30 degrees up from the board plane and facing
 // the player on the south side. As wide as the board (2.0 m) and just
-// tall enough to hold the text. In MR a thin border in the grid colour
-// frames it (see panelBorder below); in 2D there is no border.
+// tall enough to hold the text. Its bottom edge sits level with the
+// board: the panel is 0.5 m tall at a 60-degree tilt, so its bottom
+// edge sits 0.125 m below its centre — v39 raised the centre from
+// y 0.1 to y 0.13, where the bottom edge dipped 2.5 cm below the board
+// and read as "- /"; now it sits 5 mm above the board plane ("_/"),
+// aligned but not touching. A thin border in the grid colour frames
+// it (see panelBorder below), and v40 fills it with the board face
+// colour at the board's opacity and adds a divider (panelDivider)
+// between the status lines and the message.
 const panelCanvas = document.createElement('canvas');
 panelCanvas.width = 1152; panelCanvas.height = 288;
 const panelCtx = panelCanvas.getContext('2d');
@@ -235,7 +271,7 @@ const panel = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ map: panelTexture, transparent: true, side: THREE.DoubleSide })
 );
 panel.rotation.x = -Math.PI / 3;
-panel.position.set(0, 0.1, -BOARD_LAYOUT.boardSize / 2 - 0.35);
+panel.position.set(0, 0.13, -BOARD_DEPTH / 2 - 0.35);
 worldGroup.add(panel);
 
 // v38: a border around the status text, drawn with the same thin lines
@@ -243,8 +279,8 @@ worldGroup.add(panel);
 // applyLineColors). It hugs the panel edge — as wide as the board, just
 // tall enough for the text — and is a child of the panel so it follows
 // its tilt, set a hair in front of the panel face so it does not
-// z-fight with the texture. MR only: in 2D the status lives on the HUD
-// panel, so the border is shown by sessionstart and hidden by sessionend.
+// z-fight with the texture. v39: shown in 2D as well as MR — it was
+// MR-only at first, which read as a missing line on desktop.
 const panelBorderMaterial = new THREE.LineBasicMaterial({ color: gridColorHex });
 const panelBorder = new THREE.LineSegments(
   new THREE.BufferGeometry().setFromPoints([
@@ -256,8 +292,23 @@ const panelBorder = new THREE.LineSegments(
   panelBorderMaterial
 );
 panelBorder.position.z = 0.002;
-panelBorder.visible = false;
+panelBorder.visible = true;
 panel.add(panelBorder);
+
+// v40: a divider across the panel, in the same line as the border —
+// it splits the fixed top section (Level, Time, Face Down / Board)
+// from the temporary message below, so the top lines never move when
+// the message appears or expires. Same material as the border, so it
+// follows the grid colour. Local y -0.118 is canvas y 212, between
+// the Face Down row (baseline 181) and the message row (baseline 258).
+const panelDivider = new THREE.LineSegments(
+  new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-1.0, -0.118, 0), new THREE.Vector3(1.0, -0.118, 0),
+  ]),
+  panelBorderMaterial
+);
+panelDivider.position.z = 0.002;
+panel.add(panelDivider);
 
 // --- Debug readout (small grey text) -------------------------------------------
 // Shows where the viewer is and how the board is posed. Both are in the same
@@ -303,7 +354,7 @@ const scoresPanel = new THREE.Mesh(
 );
 scoresPanel.rotation.x = -Math.PI / 2;
 // Top edge level with the board's far edge, with a small gap on the left.
-scoresPanel.position.set(-BOARD_LAYOUT.boardSize / 2 - SCORES_W / 2 - 0.05, 0.012, -BOARD_LAYOUT.boardSize / 2 + SCORES_H / 2);
+scoresPanel.position.set(-BOARD_LAYOUT.boardSize / 2 - SCORES_W / 2 - 0.05, 0.012, -BOARD_DEPTH / 2 + SCORES_H / 2);
 scoresPanel.visible = false; // MR only — see the comment above
 worldGroup.add(scoresPanel);
 
@@ -359,7 +410,7 @@ exitButtonMesh.rotation.x = -Math.PI / 2;
 exitButtonMesh.position.set(
   0,
   0,
-  BOARD_LAYOUT.boardSize / 2 + EXIT_BUTTON_H / 2 + 0.04
+  BOARD_DEPTH / 2 + EXIT_BUTTON_H / 2 + 0.04
 );
 exitButtonMesh.visible = false; // shown by sessionstart, hidden by sessionend
 worldGroup.add(exitButtonMesh);
@@ -493,8 +544,8 @@ function nextLevel() {
 
 function generateLevel() {
   const pattern = [];
-  for (let col = 0; col < BOARD_LAYOUT.grid; col++) {
-    for (let row = 0; row < BOARD_LAYOUT.grid; row++) {
+  for (let col = 0; col < BOARD_LAYOUT.cols; col++) {
+    for (let row = 0; row < BOARD_LAYOUT.rows; row++) {
       if (col === START_COL && row === START_ROW) continue; // start square stays blank
       if (Math.random() < BOARD_LAYOUT.coloredFraction) {
         pattern.push({ col, row, colorIndex: Math.floor(Math.random() * COLORS.length) });
@@ -503,8 +554,8 @@ function generateLevel() {
   }
   // Guarantee a meaningful level even on an unlucky roll.
   while (pattern.length < 6) {
-    const col = Math.floor(Math.random() * BOARD_LAYOUT.grid);
-    const row = Math.floor(Math.random() * BOARD_LAYOUT.grid);
+    const col = Math.floor(Math.random() * BOARD_LAYOUT.cols);
+    const row = Math.floor(Math.random() * BOARD_LAYOUT.rows);
     if (col === START_COL && row === START_ROW) continue;
     if (pattern.some((c) => c.col === col && c.row === row)) continue;
     pattern.push({ col, row, colorIndex: Math.floor(Math.random() * COLORS.length) });
@@ -544,6 +595,7 @@ const hud = document.getElementById('hud');
 const hudLevel = document.getElementById('hudLevel');
 const hudRemaining = document.getElementById('hudRemaining');
 const hudDown = document.getElementById('hudDown');
+const hudBoard = document.getElementById('hudBoard');
 const hudTime = document.getElementById('hudTime');
 const hudScore = document.getElementById('hudScore');
 const hudMessage = document.getElementById('hudMessage');
@@ -566,33 +618,67 @@ function updateHUD() {
   const down = COLORS[orientation.down];
   hudDown.textContent = down.name;
   hudDown.style.color = down.css;
+  // v39: the square under the cube, for the "Board:" half of the line —
+  // the icon there, if any (getIcon returns undefined for a blank square).
+  const pos = getCubePosition();
+  const entry = getIcon(keyOf(pos.col, pos.row));
+  const board = entry ? COLORS[entry.colorIndex] : null;
+  hudBoard.textContent = board ? board.name : 'Blank';
+  hudBoard.style.color = board ? board.css : '';
   hudMessage.textContent = message;
-  drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, message);
+  drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, board, message);
 }
 
-// In-world panel: text only, no background fill and no border.
-function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, message) {
+// In-world panel: filled with the board face colour, with a divider
+// (a 3D line, panelDivider) between the fixed status lines and the
+// temporary message below.
+function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, board, message) {
+  // v40: the panel is filled with the board face colour (below), and
+  // the text is split by the divider into a fixed top section — Level,
+  // Time, Face Down / Board — and a bottom section for the temporary
+  // message. The three top lines never move now: before, the block was
+  // centred on the rows actually drawn, so it jumped up whenever the
+  // message expired after 3 seconds.
+  const appearance = getAppearance();
+  const b = appearance.board;
   panelCtx.clearRect(0, 0, 1152, 288);
+  // Fill with the board face colour, at the board's opacity, so the
+  // panel reads as part of the board. globalAlpha carries the opacity;
+  // the text is drawn after it is restored to 1.
+  panelCtx.globalAlpha = b.a;
+  panelCtx.fillStyle = hsvCss(b.h, b.s, b.v);
+  panelCtx.fillRect(0, 0, 1152, 288);
+  panelCtx.globalAlpha = 1;
+  panelCtx.textAlign = 'center';
   panelCtx.fillStyle = '#ffffff';
   panelCtx.font = 'bold 46px system-ui, sans-serif';
-  panelCtx.textAlign = 'center';
-  panelCtx.fillText(`Level ${level}   Remaining: ${remaining}`, 576, 58);
-  panelCtx.fillText(`Time: ${levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds())}   Score: ${levelScore}`, 576, 124);
-  // v36: 'Face down:' stays white; only the colour word takes the colour.
+  panelCtx.fillText(`Level ${level}   Remaining: ${remaining}`, 576, 55);
+  panelCtx.fillText(`Time: ${levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds())}   Score: ${levelScore}`, 576, 121);
+  // Face Down / Board row (v39): two colour words, labels white.
   panelCtx.font = 'bold 42px system-ui, sans-serif';
-  const faceLabel = 'Face down: ';
-  const faceLabelW = panelCtx.measureText(faceLabel).width;
-  const faceNameW = panelCtx.measureText(down.name).width;
-  const faceX = 576 - (faceLabelW + faceNameW) / 2;
+  const parts = [
+    { text: 'Face Down: ', color: '#ffffff' },
+    { text: down.name, color: down.css },
+    { text: ', Board: ', color: '#ffffff' },
+    board ? { text: board.name, color: board.css } : { text: 'Blank', color: '#ffffff' },
+  ];
+  const totalW = parts.reduce((sum, p) => sum + panelCtx.measureText(p.text).width, 0);
+  let x = 576 - totalW / 2;
   panelCtx.textAlign = 'left';
-  panelCtx.fillStyle = '#ffffff';
-  panelCtx.fillText(faceLabel, faceX, 184);
-  panelCtx.fillStyle = down.css;
-  panelCtx.fillText(down.name, faceX + faceLabelW, 184);
+  for (const p of parts) {
+    panelCtx.fillStyle = p.color;
+    panelCtx.fillText(p.text, x, 181);
+    x += panelCtx.measureText(p.text).width;
+  }
   panelCtx.textAlign = 'center';
-  panelCtx.fillStyle = '#ffffff';
-  panelCtx.font = '32px system-ui, sans-serif';
-  panelCtx.fillText(message.length > 58 ? message.slice(0, 58) + '…' : message, 576, 248);
+  // Temporary message, centred in the bottom section (below the
+  // divider at canvas y 212). Drawn only while there is one; the
+  // section stays empty otherwise, and the top lines do not move.
+  if (message) {
+    panelCtx.fillStyle = '#ffffff';
+    panelCtx.font = '32px system-ui, sans-serif';
+    panelCtx.fillText(message.length > 58 ? message.slice(0, 58) + '…' : message, 576, 258);
+  }
   panelTexture.needsUpdate = true;
 }
 
@@ -638,7 +724,7 @@ function tryRoll(dir) {
   const pos = getCubePosition();
   const destCol = pos.col + dCol;
   const destRow = pos.row + dRow;
-  if (destCol < 0 || destCol >= BOARD_LAYOUT.grid || destRow < 0 || destRow >= BOARD_LAYOUT.grid) {
+  if (destCol < 0 || destCol >= BOARD_LAYOUT.cols || destRow < 0 || destRow >= BOARD_LAYOUT.rows) {
     setMessage('Edge — can\'t roll that way.');
     updateHUD();
     return;
@@ -757,7 +843,7 @@ function startCelebration() {
     const o = i * 3;
     confettiPositions[o] = (Math.random() - 0.5) * BOARD_LAYOUT.boardSize;
     confettiPositions[o + 1] = 0.02;
-    confettiPositions[o + 2] = (Math.random() - 0.5) * BOARD_LAYOUT.boardSize;
+    confettiPositions[o + 2] = (Math.random() - 0.5) * BOARD_DEPTH;
     confettiVelocities[o] = (Math.random() - 0.5) * 0.15;
     confettiVelocities[o + 1] = 0.25 + Math.random() * 0.45;
     confettiVelocities[o + 2] = (Math.random() - 0.5) * 0.15;
@@ -912,29 +998,49 @@ window.addEventListener('wheel', (e) => {
 // button, so the panel can be hidden and brought back with the mouse.
 // v33: the key is TAB now, and hiding the panel also hides every
 // button in the top-right bar except Hide/Show itself (so you can
-// bring it all back) — the MR button is separate and stays. The
-// label is a fixed "Hide/Show Panel" with a TAB keycap.
+// bring it all back) — the MR button is separate and stays.
+// v40: the label matches the other toggle buttons now — "Show Panel"
+// when hidden, "Hide Panel" when shown — instead of the fixed
+// "Hide/Show Panel". And the panel starts hidden on page load (see
+// setHudVisible(false) below), so only this button and the MR button
+// show until TAB or the button brings it all back.
 const btnHidePanel = document.getElementById('btnHidePanel');
-function toggleHudPanel() {
-  const hidden = hud.style.display === 'none';
-  hud.style.display = hidden ? '' : 'none';
+function updatePanelLabel() {
+  btnHidePanel.querySelector('.label').textContent = hud.style.display === 'none' ? 'Show Panel' : 'Hide Panel';
+}
+function setHudVisible(visible) {
+  hud.style.display = visible ? '' : 'none';
   document.querySelectorAll('#hudButtons button').forEach((b) => {
-    if (b.id !== 'btnHidePanel') b.style.display = hidden ? '' : 'none';
+    if (b.id !== 'btnHidePanel') b.style.display = visible ? '' : 'none';
   });
+  updatePanelLabel();
+}
+function toggleHudPanel() {
+  setHudVisible(hud.style.display === 'none');
 }
 btnHidePanel.addEventListener('click', toggleHudPanel);
+setHudVisible(false); // the panel starts hidden on page load
 
-// v34: the help panel — everything that used to sit below the
-// session scores in the main panel (debug readout, colour table, help
-// text) lives in its own panel at the bottom right, off by default.
-// The Show/Hide Help button and the ? key toggle it. It is
-// independent of the main panel: hiding the main panel does not close
-// it, and opening it does not show the main panel.
+// v34: the help panel — the help text lives in its own panel at the
+// bottom left, off by default. (The debug readout and colour table
+// used to live here too; v38 moved the debug readout back to the main
+// panel, and v39 moved the colour table there as well, so neither is
+// tied to "help" any more.) The Show Help button and the ? key toggle
+// it. It is independent of the main panel: hiding the main panel does
+// not close it, and opening it does not show the main panel.
+// v39: the button label follows the state — "Show Help" when closed,
+// "Hide Help" when open.
 const helpPanel = document.getElementById('helpPanel');
+const btnHelp = document.getElementById('btnHelp');
+function updateHelpLabel() {
+  btnHelp.querySelector('.label').textContent = helpPanel.classList.contains('open') ? 'Hide Help' : 'Show Help';
+}
 function toggleHelpPanel() {
   helpPanel.classList.toggle('open');
+  updateHelpLabel();
 }
-document.getElementById('btnHelp').addEventListener('click', toggleHelpPanel);
+btnHelp.addEventListener('click', toggleHelpPanel);
+updateHelpLabel();
 
 // v33: confirmation dialog for the two destructive actions (Reset
 // Colors, Clear Scores). Same dark-box pattern as the copy overlay.
@@ -1027,7 +1133,14 @@ function resetHome() {
 document.getElementById('btnResetHome').addEventListener('click', resetHome);
 
 // v32: named so the D and F keys can call the same actions as the buttons.
-function toggleDebug() { setDebugVisible(!getDebugVisible()); updateDebug(); updateColorTable(); }
+// v39: the Debug button label follows the state — "Show Debug" when the
+// readout is off, "Hide Debug" when it is on.
+const btnDebug = document.getElementById('btnDebug');
+function updateDebugLabel() {
+  btnDebug.querySelector('.label').textContent = getDebugVisible() ? 'Hide Debug' : 'Show Debug';
+}
+function toggleDebug() { setDebugVisible(!getDebugVisible()); updateDebug(); updateColorTable(); updateDebugLabel(); }
+updateDebugLabel();
 function forceRefresh() {
   const url = new URL(location.href);
   url.searchParams.set('fresh', String(Date.now()));
@@ -1042,7 +1155,7 @@ function rotateLeft() { worldGroup.rotateOnWorldAxis(WORLD_UP, Math.PI / 24); }
 function rotateRight() { worldGroup.rotateOnWorldAxis(WORLD_UP, -Math.PI / 24); }
 document.getElementById('btnNext').addEventListener('click', nextLevel);
 document.getElementById('btnRestart').addEventListener('click', restartLevel);
-document.getElementById('btnDebug').addEventListener('click', toggleDebug);
+btnDebug.addEventListener('click', toggleDebug);
 document.getElementById('btnClearScores').addEventListener('click', requestClearScores);
 document.getElementById('btnForceRefresh').addEventListener('click', forceRefresh);
 // v33: Tilt and Zoom buttons — the same actions as the [ ] and +/-
@@ -1096,7 +1209,8 @@ function buildSessionConfigScript() {
   const orientation = getOrientation();
   const settings = {
     boardLayout: {
-      grid: BOARD_LAYOUT.grid,
+      cols: BOARD_LAYOUT.cols,
+      rows: BOARD_LAYOUT.rows,
       boardSize: BOARD_LAYOUT.boardSize,
       coloredFraction: BOARD_LAYOUT.coloredFraction,
       rollSeconds: BOARD_LAYOUT.rollSeconds,
@@ -1205,6 +1319,30 @@ for (const i of [0, 1]) {
 }
 
 const STICK_REPEAT_SECONDS = 0.125; // one square per twentieth of a second while the stick is held
+// v40: D-pad stick zones — the stick rolls like a D-pad, not a free
+// analogue stick. Each cardinal direction owns a 60° wedge (± the
+// half-width below); the 30° gaps centred on the diagonals roll
+// nothing, so a push near a diagonal no longer flips direction with
+// the slightest wobble. The angle is measured with y down, so 0° is
+// east, 90° south, 180° west and -90° north — the same mapping the
+// old dominant-axis test used.
+const STICK_WEDGE_HALF_DEGREES = 30;
+function stickRollDirection(x, y) {
+  const angle = Math.atan2(y, x) * 180 / Math.PI;
+  const dirs = [
+    { name: 'east', angle: 0 },
+    { name: 'south', angle: 90 },
+    { name: 'west', angle: 180 },
+    { name: 'north', angle: -90 },
+  ];
+  let best = null, bestDiff = Infinity;
+  for (const d of dirs) {
+    let diff = Math.abs(angle - d.angle);
+    if (diff > 180) diff = 360 - diff;
+    if (diff < bestDiff) { bestDiff = diff; best = d.name; }
+  }
+  return bestDiff <= STICK_WEDGE_HALF_DEGREES + 1e-9 ? best : null; // the epsilon keeps a stick sitting exactly on the 30° edge inside the wedge instead of losing it to float rounding
+}
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpMid = new THREE.Vector3();
 
 // Grip state comes from each controller's own squeeze events, so it always
@@ -1243,9 +1381,18 @@ renderer.xr.addEventListener('sessionstart', () => {
   setMenuPrev(false);
   setAppearancePrev(false);
   setTriggerPrev(false);
+  // v39: hide the help panel and the debug readout too — they are 2D
+  // panels, and leaving them up means coming back to a cluttered
+  // desktop. Hiding only changes visibility: the help text stays in
+  // its div and the last debug lines stay in hudDebug (updateDebug
+  // returns early when hidden, before writing anything), so nothing
+  // is cleared.
+  helpPanel.classList.remove('open');
+  updateHelpLabel();
+  setDebugVisible(false);
+  updateDebugLabel();
   exitButtonMesh.visible = true; // the board's Exit MR button is an in-session control
-  scoresPanel.visible = true; // the side panels and the status border are MR only
-  panelBorder.visible = true;
+  scoresPanel.visible = true; // the side panels are MR only (the status border is always on now)
   updateDebug(); // refresh the in-world debug panel's visibility right away
   resetWorldForMR();
   restartLevel(); // entering or leaving MR restarts the current board
@@ -1260,7 +1407,13 @@ renderer.xr.addEventListener('sessionend', () => {
   exitButtonHover = false;
   drawExitButton(false);
   scoresPanel.visible = false;
-  panelBorder.visible = false;
+  // v39: hide the help panel and the debug readout on leaving a
+  // session as well, for the same reason as on entry — and the same
+  // guarantee: visibility only, the text stays put.
+  helpPanel.classList.remove('open');
+  updateHelpLabel();
+  setDebugVisible(false);
+  updateDebugLabel();
   updateDebug(); // hides the in-world debug panel right away
   exitLaser.visible = false;
   exitLaserUntil = 0;
@@ -1711,7 +1864,7 @@ function applyLineColors() {
   for (let i = 0; i < colors.count; i++) colors.setXYZ(i, c.r, c.g, c.b);
   colors.needsUpdate = true;
   grid.material.color.set(0xffffff);
-  panelBorderMaterial.color.copy(c); // the status border is a grid line too
+  panelBorderMaterial.color.copy(c); // the status border and divider are grid lines too
   cubeEdgeMaterial.color.set(hsvCss(e.h, e.s, e.v));
 }
 function applyShapeStyles() {
@@ -1966,7 +2119,7 @@ function applyAppearanceDrag(px, py) {
   const now = performance.now();
   const lastHapticAt = getLastHapticAt();
   if (now - lastHapticAt > 80) { setLastHapticAt(now); triggerHaptic(0.1, 15, 'left'); }
-  if (key === 'board') applyBoardAppearance();
+  if (key === 'board') { applyBoardAppearance(); updateHUD(); } // the status panel fill follows the board colour live
   else if (key === 'boardIcons') applyBoardIconOpacity();
   else if (key === 'cube') {
     applyCubeOpacity();
@@ -2234,18 +2387,18 @@ renderer.setAnimationLoop(() => {
       const mag = Math.hypot(input.stick.x, input.stick.y);
       if (mag < 0.3) { setStickReady(true); setStickTimer(0); }
       else if (mag > 0.6) {
-        let stickTimer = getStickTimer();
-        stickTimer -= dt;
-        if (getStickReady() || stickTimer <= 0) {
-          setStickReady(false);
-          setStickTimer(STICK_REPEAT_SECONDS);
-          if (Math.abs(input.stick.x) > Math.abs(input.stick.y)) {
-            tryRoll(input.stick.x > 0 ? 'east' : 'west');
+        const dir = stickRollDirection(input.stick.x, input.stick.y);
+        if (!dir) { setStickReady(true); setStickTimer(0); } // in a diagonal gap: nothing, and no queued roll
+        else {
+          let stickTimer = getStickTimer();
+          stickTimer -= dt;
+          if (getStickReady() || stickTimer <= 0) {
+            setStickReady(false);
+            setStickTimer(STICK_REPEAT_SECONDS);
+            tryRoll(dir);
           } else {
-            tryRoll(input.stick.y > 0 ? 'south' : 'north');
+            setStickTimer(stickTimer);
           }
-        } else {
-          setStickTimer(stickTimer);
         }
       }
     }

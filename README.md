@@ -4,10 +4,12 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 
 ## The game
 
-- A horizontal 11×11 board floats in front of you. It is a 34% opaque dark-blue
+- A horizontal 17×11 board floats in front of you — 17 squares across,
+  11 deep, about 3:2, so it fits a wider-than-tall view. It is a 34% opaque dark-blue
   surface (`BOARD_COLOR` `#000584`, `BOARD_OPACITY`) with black grid lines
-  (`GRID_COLOR` `0x000000`), so it tints the background behind it. The board footprint is still 2 m, so each cell is
-  about 0.182 m — to change the board size, change `BOARD_SIZE` in `app/config.js`,
+  (`GRID_COLOR` `0x000000`), so it tints the background behind it. The board is
+  about 3.09 m wide and 2.0 m deep, so each cell is about 0.182 m — to change
+  the board, change `cols` / `rows` / `boardSize` in `app/sessionConfig.js`,
   not `CELL`, and the cells, cube, and icons will scale with it.
 - A cube has dark-grey faces (`CUBE_FACE_COLOR` `#222222`) at 40% opacity
   (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
@@ -55,7 +57,9 @@ and Purple west.
 
 ### Meta Quest (Quest Browser, WebXR)
 - **Thumbstick** (either controller): push to roll one square that way; hold it to keep rolling one square every half second.
-  Push forward = north (away from you), back = south, left/right as shown.
+  Push forward = north (away from you), back = south, left/right as shown. The stick acts like a D-pad:
+  each direction owns a 60° wedge around it, and the 30° gaps centred on the diagonals roll nothing,
+  so a push near a diagonal does not flip direction.
 - **Grips**: world drag.
   - **One grip** (either hand): the world follows that hand, translate only.
   - **Both grips**: the world also rotates and scales:
@@ -140,14 +144,17 @@ and Purple west.
 - T: tilt the board up 5°; Shift+T tilts it down 5° (0–180°, same as
   grip + thumbstick in MR). The **Tilt Up** / **Tilt Down** buttons, or
   the **[** / **]** keys, do the same.
-- TAB: hide/show the whole top-left HUD panel and the other top-right
-  buttons. TAB again brings them back. The **Hide/Show Panel** button
+- TAB: show/hide the whole top-left HUD panel and the other top-right
+  buttons. The panel starts hidden on page load, so TAB (or the button)
+  is how it first appears. TAB again hides them. The **Show Panel** button
   does the same with the mouse; only it and the MR button stay visible
   while everything is hidden.
-- ?: show/hide the help panel (bottom left — colour table, help text). The **Show/Hide Help** button does the same. The
+- ?: show/hide the help panel (bottom left — help text). The **Show Help** button does the same. The
   help panel is off by default; the main panel keeps the live
-  status (level, time, score, face down, message, build date), the
-  session scores, and the debug readout below the scores when it is on.
+  status (level, time, score, face down and board square, message, build date), the
+  session scores, the debug readout below the scores when it is on, and
+  the colour table. The Show Panel, Show Help and Show Debug buttons read
+  Hide instead of Show while their panel or readout is open.
 - X: clear the saved top-10 scores (asks for confirmation; no undo). The **Clear Scores**
   button in the top-right button bar does the same.
 - Copy Settings (2D only): the **Copy Settings** button in the top-right
@@ -171,8 +178,8 @@ and Purple west.
 - F: force refresh (reload with a unique version string, bypassing
   the cache). The **Force Refresh** button does the same.
 - N: next level. R: restart the current level (same pattern, icons restored).
-- The buttons in the top-right bar, in order, are Hide/Show Panel,
-  Show/Hide Help, Next Level, Restart Level, Clear Scores, Show Debug,
+- The buttons in the top-right bar, in order, are Show Panel,
+  Show Help, Show Debug, Next Level, Restart Level, Clear Scores,
   Copy Settings, Reset Colors, Reset Home, Tilt Up,
   Tilt Down, Zoom In, Zoom Out, Rotate Left, Rotate Right and Force
   Refresh. Each button shows its hotkey as a bold key at the
@@ -209,7 +216,7 @@ CubeGameWebXR/                  repo root
 
 The settings a fresh load starts from live in one file,
 `app/sessionConfig.js`, as `SESSION_DEFAULTS`: `boardLayout`
-(grid, board size, coloured fraction, roll time), `boardHome_2D`
+(columns, rows, board width, coloured fraction, roll time), `boardHome_2D`
 and `boardHome_MR` (position, tilt, scale), `appearance`
 (everything the B-button panel edits, colours as hex) and
 `skybox` (default mode). Edit the values there and reload; the
@@ -359,7 +366,9 @@ numbers; what you see is the difference between them.
 - `app/main.js` — game flow: board, cube orientation and rolling
   animation, flat icons, level generation, thumbstick/grip input,
   appearance/menu panels, scores, and the in-world status text (tilted
-  up past the far edge, 2.0 m wide, with a grid-line border in MR),
+  up past the far edge, 2.0 m wide, its bottom edge level with the
+  board, filled with the board face colour, with a grid-line border
+  and a divider between the status lines and the message),
   and the sky background. Shared state lives in
   `app/state.js`; constants and colours in `app/config.js`; the cube
   (six separate face planes) in `app/cube.js`.

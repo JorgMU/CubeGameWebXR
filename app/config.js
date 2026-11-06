@@ -7,19 +7,23 @@ import { SESSION_DEFAULTS } from './sessionConfig.js';
 export const BUILD_LABEL = '2026-11-04 refactor01-fixed2'; // fallback only: the HUD date comes from Last-Modified headers (see buildTime.js)
 // Updated Nov 5, 2026 (v17): desktop home is further away, tilted and larger
 
-// Board and grid — v30: GRID, BOARD_SIZE and COLORED_FRACTION moved
-// to app/sessionConfig.js (SESSION_DEFAULTS.boardLayout). CELL and CUBE
-// are still derived here from them.
-export const CELL = SESSION_DEFAULTS.boardLayout.boardSize / SESSION_DEFAULTS.boardLayout.grid;
+// Board and grid — v30: the board layout moved to
+// app/sessionConfig.js (SESSION_DEFAULTS.boardLayout). CELL, CUBE
+// and BOARD_DEPTH are still derived here from it. v40: the board is
+// rectangular (cols across, rows deep), so CELL comes from the width
+// and the depth follows from the cell size.
+export const CELL = SESSION_DEFAULTS.boardLayout.boardSize / SESSION_DEFAULTS.boardLayout.cols;
 export const CUBE = CELL;
+export const BOARD_DEPTH = CELL * SESSION_DEFAULTS.boardLayout.rows; // m, board depth (north-south)
 
 // Cube rolling — v30: moved to app/sessionConfig.js
 // (SESSION_DEFAULTS.boardLayout.rollSeconds).
 
 // Starting position — derived from the session board layout
-// (SESSION_DEFAULTS.boardLayout.grid).
-export const START_COL = Math.floor(SESSION_DEFAULTS.boardLayout.grid / 2);
-export const START_ROW = Math.floor(SESSION_DEFAULTS.boardLayout.grid / 2);
+// (SESSION_DEFAULTS.boardLayout.cols / .rows). Both counts are odd,
+// so the start square is the centre square in both directions.
+export const START_COL = Math.floor(SESSION_DEFAULTS.boardLayout.cols / 2);
+export const START_ROW = Math.floor(SESSION_DEFAULTS.boardLayout.rows / 2);
 
 // Colors and shapes — the six tile identities (name and shape stay
 // fixed here). The fill colours are the session defaults

@@ -1,13 +1,17 @@
 import * as THREE from 'three';
 import { CELL } from './config.js';
-// v30: GRID moved to app/sessionConfig.js
-// (SESSION_DEFAULTS.boardLayout.grid).
+// v30: the board layout moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.boardLayout.cols / .rows).
 import { SESSION_DEFAULTS } from './sessionConfig.js';
 
 // Math utilities
+// v40: the board is rectangular, so the column and row centres are
+// separate — one centre for both axes put every icon half a cell
+// off in the short direction.
 export function cellToLocal(col, row) {
-  const centre = (SESSION_DEFAULTS.boardLayout.grid - 1) / 2;
-  return new THREE.Vector3((col - centre) * CELL, 0, (row - centre) * CELL);
+  const colCentre = (SESSION_DEFAULTS.boardLayout.cols - 1) / 2;
+  const rowCentre = (SESSION_DEFAULTS.boardLayout.rows - 1) / 2;
+  return new THREE.Vector3((col - colCentre) * CELL, 0, (row - rowCentre) * CELL);
 }
 
 export function keyOf(col, row) {

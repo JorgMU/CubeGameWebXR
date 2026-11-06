@@ -7,10 +7,17 @@
 // at runtime until cleared — that is what the reset control is for, not
 // this file.
 export const SESSION_DEFAULTS = {
-  // Board layout — geometry shared by 2D and MR
+  // Board layout — geometry shared by 2D and MR.
+  // v40: rectangular now — 17 squares across (east-west) by 11 deep
+  // (north-south), about 3:2, so the board fits a wider-than-tall
+  // view. Both are odd, so the start square stays dead centre.
+  // boardSize is the width, sized so the 11-deep side stays the
+  // 2.0 m it was when the board was square (2.0 x 17 / 11); the
+  // depth follows from the cell size.
   boardLayout: {
-    grid: 11, // squares per side
-    boardSize: 2.0, // m, board footprint
+    cols: 17, // squares across
+    rows: 11, // squares deep
+    boardSize: 2.0 * 17 / 11, // m, board width (east-west)
     coloredFraction: 0.5, // share of squares coloured each level
     rollSeconds: 0.1,
   },

@@ -61,10 +61,11 @@
     font: bold 13px Consolas, monospace;
     margin-left: 12px;
   }
-  /* v34: the help panel — everything that used to sit below the
-     session scores in the main panel (debug readout, colour table,
-     help text) lives here instead, at the bottom right, off by
-     default. Same dark-box style as the main panel. */
+  /* v34: the help panel — the help text lives in its own panel at the
+     bottom left, off by default. (The debug readout and colour table
+     used to live here too; v38 moved the debug readout back to the main
+     panel, and v39 moved the colour table there as well, so neither is
+     tied to "help" any more.) Same dark-box style as the main panel. */
   #helpPanel {
     position: absolute; bottom: 12px; left: 12px; z-index: 10;
     background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.25);
@@ -133,12 +134,12 @@
 </head>
 <body>
 <div id="hudButtons">
-  <button id="btnHidePanel">Hide/Show Panel <span class="key">TAB</span></button>
-  <button id="btnHelp">Show/Hide Help <span class="key">?</span></button>
+  <button id="btnHidePanel"><span class="label">Show Panel</span> <span class="key">TAB</span></button>
+  <button id="btnHelp"><span class="label">Show Help</span> <span class="key">?</span></button>
+  <button id="btnDebug"><span class="label">Show Debug</span> <span class="key">*</span></button>
   <button id="btnNext">Next Level <span class="key">N</span></button>
   <button id="btnRestart">Restart Level <span class="key">R</span></button>
   <button id="btnClearScores">Clear Scores <span class="key">X</span></button>
-  <button id="btnDebug">Show Debug <span class="key">*</span></button>
   <button id="btnCopySettings">Copy Settings <span class="key">C</span></button>
   <button id="btnResetColors">Reset Colors <span class="key">O</span></button>
   <button id="btnResetHome">Reset Home <span class="key">H</span></button>
@@ -153,7 +154,7 @@
 <div id="hud">
   <div>Level: <b id="hudLevel">1</b> &nbsp; Remaining: <b id="hudRemaining">–</b></div>
   <div>Time: <b id="hudTime">Ready</b> &nbsp; Score: <b id="hudScore">0</b></div>
-  <div>Face down: <b id="hudDown">–</b></div>
+  <div>Face Down: <b id="hudDown">–</b>, Board: <b id="hudBoard">–</b></div>
   <div id="hudMessage">Roll the cube onto a matching flat icon.</div>
   <div id="hudBuildTimestamp"></div>
   <details id="records">
@@ -164,9 +165,9 @@
     </table>
   </details>
   <div id="hudDebug"></div>
+  <div id="hudColors"></div>
 </div>
 <div id="helpPanel">
-  <div id="hudColors"></div>
   <div id="help">
     Quest: thumbstick rolls one square. Hold <b>one grip</b> to drag the world, or <b>both grips</b> to also rotate and scale:
     twist hands to rotate (yaw), move hands apart/together to scale. Press <b>B button</b> (right hand) to open the color picker.<br />
