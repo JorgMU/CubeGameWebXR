@@ -85,12 +85,14 @@
 </head>
 <body>
 <div id="hudButtons">
-  <button id="btnNext">Next level (N)</button>
-  <button id="btnRestart">Restart level (R)</button>
-  <button id="btnDebug">Debug (P)</button>
-  <button id="btnCopySettings">Copy settings</button>
-  <button id="btnClearScores">Clear scores (C)</button>
-  <button id="btnForceRefresh">Force refresh</button>
+  <button id="btnHidePanel">Hide/Show Panel (H)</button>
+  <button id="btnNext">Next Level (N)</button>
+  <button id="btnRestart">Restart Level (R)</button>
+  <button id="btnClearScores">Clear Scores (C)</button>
+  <button id="btnDebug">Show Debug (D)</button>
+  <button id="btnCopySettings">Copy Settings (S)</button>
+  <button id="btnForceRefresh">Force Refresh (F)</button>
+  <button id="btnResetDefaults">Reset All (A)</button>
 </div>
 <div id="hud">
   <div>Level: <b id="hudLevel">1</b> &nbsp; Remaining: <b id="hudRemaining">–</b></div>
@@ -110,8 +112,8 @@
   <div id="help">
     Quest: thumbstick rolls one square. Hold <b>one grip</b> to drag the world, or <b>both grips</b> to also rotate and scale:
     twist hands to rotate (yaw), move hands apart/together to scale. Press <b>B button</b> (right hand) to open the color picker.<br />
-    Desktop: arrow keys / WASD roll, Ctrl+Arrow move world, Q/E rotate world,
-    +/-/wheel scale world, 0 reset world, N next, R restart, P toggle debug info, T tilt board up, Shift+T tilt down, H hide/show this panel (the buttons at the top right stay visible), C clear scores. Copy settings copies the session defaults to the clipboard as ECMAScript, ready to paste into app/sessionConfig.js.<br />
+    Desktop: arrow keys roll, Ctrl+Arrow move world, Q/E rotate world,
+    +/-/wheel scale world, 0 reset world, N next, R restart, D show debug info, T tilt board up, Shift+T tilt down, H hide/show this panel (the buttons at the top right stay visible), C clear scores, S copy settings, F force refresh, A reset all. Copy settings copies the session defaults to the clipboard as ECMAScript, ready to paste into app/sessionConfig.js. Reset all clears the saved colours and restores the server defaults (no undo; scores are not touched).<br />
     The clock starts on your first move. Each match is worth 180 points minus one point per elapsed second (minimum 0). The top 10 completed levels are kept across sessions (saved in your browser, like the colours), and shown in the table above and on the scores panel beside the board. C, or the Clear scores button, wipes them.<br />
     In MR after a win, pull a trigger to start the next level.
   </div>

@@ -81,7 +81,7 @@ import { initCube, getCube, getCubeMaterials, getCubeShapeMaterials, getCubeFace
 // FACE-DOWN face matches that square's flat icon. Clear all coloured
 // squares to finish the level. No timer or lose condition.
 // Controls: Quest thumbstick rolls; hold BOTH grips to drag the world
-// (translate / yaw-rotate / scale). Desktop: arrows/WASD roll, Q/E rotate,
+// (translate / yaw-rotate / scale). Desktop: arrows roll, Q/E rotate,
 // +/- scale, N next level, R restart level, 0 reset world transform,
 // Ctrl+Arrow moves the world (one cell step, hold to repeat),
 // mouse wheel scales the world like +/-.
@@ -277,6 +277,53 @@ scoresPanel.rotation.x = -Math.PI / 2;
 // Top edge level with the board's far edge, with a small gap on the left.
 scoresPanel.position.set(-BOARD_LAYOUT.boardSize / 2 - SCORES_W / 2 - 0.05, 0.012, -BOARD_LAYOUT.boardSize / 2 + SCORES_H / 2);
 worldGroup.add(scoresPanel);
+
+// --- Exit MR button (flat in the board plane, bottom-right edge) ----------
+// Just past the south (near) edge at the east end, so it sits on the
+// board under the player's right hand. It only shows while an MR
+// session is running — there is nothing to exit in 2D — and it is
+// operated the same way as the Y menu: point the RIGHT controller at
+// it and pull the trigger. Pointing at it highlights it bright green.
+// v32: half the size it was, and aligned to the board's south-east
+// corner — its right edge flush with the board's east edge, its top
+// edge flush with the board's south edge, hugging the corner just
+// outside the board instead of floating 0.05 m off it.
+const EXIT_BUTTON_W = 0.275, EXIT_BUTTON_H = 0.06875;
+const exitButtonCanvas = document.createElement('canvas');
+exitButtonCanvas.width = 512; exitButtonCanvas.height = 128;
+const exitButtonCtx = exitButtonCanvas.getContext('2d');
+const exitButtonTexture = new THREE.CanvasTexture(exitButtonCanvas);
+exitButtonTexture.colorSpace = THREE.SRGBColorSpace;
+function drawExitButton(hovered) {
+  exitButtonCtx.clearRect(0, 0, exitButtonCanvas.width, exitButtonCanvas.height);
+  exitButtonCtx.fillStyle = 'rgba(0,0,0,0.35)';
+  exitButtonCtx.fillRect(0, 0, exitButtonCanvas.width, exitButtonCanvas.height);
+  exitButtonCtx.strokeStyle = hovered ? '#00ff66' : '#007a33';
+  exitButtonCtx.lineWidth = 6;
+  exitButtonCtx.shadowColor = '#00ff66';
+  exitButtonCtx.shadowBlur = hovered ? 18 : 0;
+  exitButtonCtx.strokeRect(3, 3, 506, 122);
+  exitButtonCtx.fillStyle = hovered ? '#00ff66' : '#007a33';
+  exitButtonCtx.font = 'bold 64px system-ui, sans-serif';
+  exitButtonCtx.textAlign = 'center';
+  exitButtonCtx.textBaseline = 'middle';
+  exitButtonCtx.fillText('Exit MR', 256, 66);
+  exitButtonTexture.needsUpdate = true;
+}
+drawExitButton(false);
+const exitButtonMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(EXIT_BUTTON_W, EXIT_BUTTON_H),
+  new THREE.MeshBasicMaterial({ map: exitButtonTexture, transparent: true, side: THREE.DoubleSide })
+);
+exitButtonMesh.rotation.x = -Math.PI / 2;
+exitButtonMesh.position.set(
+  BOARD_LAYOUT.boardSize / 2 - EXIT_BUTTON_W / 2,
+  0.012,
+  BOARD_LAYOUT.boardSize / 2 + EXIT_BUTTON_H / 2
+);
+exitButtonMesh.visible = false; // shown by sessionstart, hidden by sessionend
+worldGroup.add(exitButtonMesh);
+let exitButtonHover = false;
 
 function drawScoresPanel(records) {
   const ctx = scoresCtx;
@@ -745,19 +792,25 @@ window.addEventListener('keydown', (e) => {
     else if (k === 'arrowright') worldGroup.position.x += step;
     return;
   }
-  if (k === 'arrowup' || k === 'w') tryRoll('north');
-  else if (k === 'arrowdown' || k === 's') tryRoll('south');
-  else if (k === 'arrowleft' || k === 'a') tryRoll('west');
-  else if (k === 'arrowright' || k === 'd') tryRoll('east');
+  // v32: arrow keys roll the cube; WASD no longer rolls — D, S and A
+  // are hotkeys now (debug, copy settings, reset all), so the letters
+  // had to go. Ctrl+Arrow above still moves the world.
+  if (k === 'arrowup') tryRoll('north');
+  else if (k === 'arrowdown') tryRoll('south');
+  else if (k === 'arrowleft') tryRoll('west');
+  else if (k === 'arrowright') tryRoll('east');
   else if (k === 'n') nextLevel();
   else if (k === 'r') restartLevel();
   else if (k === 'q') worldGroup.rotateOnWorldAxis(WORLD_UP, Math.PI / 12);
   else if (k === 'e') worldGroup.rotateOnWorldAxis(WORLD_UP, -Math.PI / 12);
   else if (k === '=' || k === '+') worldGroup.scale.multiplyScalar(1.1);
   else if (k === '-' || k === '_') worldGroup.scale.multiplyScalar(0.9);
-  else if (k === 'p') { setDebugVisible(!getDebugVisible()); updateDebug(); updateColorTable(); }
+  else if (k === 'd') toggleDebug(); // D: show debug info (was P)
   else if (k === 'c') clearScores(); // clear the persisted top-10 scores (no undo)
-  else if (k === 'h') { hud.style.display = hud.style.display === 'none' ? '' : 'none'; } // H: hide/show the top-left HUD panel (2D mode). Was Space; Space is the standard key for activating a focused control, so it is left free for that.
+  else if (k === 'h') toggleHudPanel(); // H: hide/show the top-left HUD panel (2D mode). Was Space; Space is the standard key for activating a focused control, so it is left free for that.
+  else if (k === 's') copySessionConfig(); // S: copy settings
+  else if (k === 'f') forceRefresh(); // F: force refresh
+  else if (k === 'a') resetDefaults(); // A: reset all settings to the server defaults (no undo)
   else if (k === 't') stepTilt(e.shiftKey ? -1 : 1); // desktop tilt: T up, Shift+T down (was missing in 2D mode)
   else if (k === 'k') toggleSky();
   else if (k === '0') {
@@ -775,11 +828,55 @@ window.addEventListener('wheel', (e) => {
   e.preventDefault();
   worldGroup.scale.multiplyScalar(e.deltaY < 0 ? 1.1 : 0.9);
 }, { passive: false });
+// v31: Hide panel (H) — the same toggle as the H key, as a button, so
+// the panel can be hidden and brought back with the mouse. The button
+// lives in #hudButtons, outside #hud, so it stays visible while the
+// panel is hidden.
+// v32: the label is now a fixed "Hide/Show Panel (H)" — it no longer
+// flips with the panel's state.
+const btnHidePanel = document.getElementById('btnHidePanel');
+function toggleHudPanel() {
+  hud.style.display = hud.style.display === 'none' ? '' : 'none';
+}
+btnHidePanel.addEventListener('click', toggleHudPanel);
+
+// v31: Reset defaults — clears the saved appearance (and nothing else)
+// and rebuilds it from the session defaults in sessionConfig.js, then
+// re-applies everything the same way startup does. The sky goes back
+// to the session default too. The top-10 scores are NOT touched (that
+// is Clear scores' job). No undo, like Clear scores.
+function resetDefaults() {
+  try { localStorage.removeItem(AP_STORAGE_KEY); } catch { /* ignore */ }
+  setAppearance(buildDefaultAppearance());
+  const defaultSky = SKY_MODES.indexOf(SESSION_DEFAULTS.skybox.mode);
+  setSkyMode(defaultSky >= 0 ? defaultSky : 0);
+  loadSky();
+  applyShapeStyles();
+  applyBoardAppearance();
+  applyCubeShapeOpacity();
+  applyBoardIconOpacity();
+  applyLineColors();
+  for (const col of COLORS) { addDirtyShape(col.shape); addDirtyCubeShape(col.shape); }
+  setCubeColorDirty(true);
+  flushAppearance();
+  updateColorTable();
+  setMessage('Settings reset to the server defaults.');
+  updateHUD();
+}
+document.getElementById('btnResetDefaults').addEventListener('click', resetDefaults);
+
+// v32: named so the D and F keys can call the same actions as the buttons.
+function toggleDebug() { setDebugVisible(!getDebugVisible()); updateDebug(); updateColorTable(); }
+function forceRefresh() {
+  const url = new URL(location.href);
+  url.searchParams.set('fresh', String(Date.now()));
+  location.href = url.toString();
+}
 document.getElementById('btnNext').addEventListener('click', nextLevel);
 document.getElementById('btnRestart').addEventListener('click', restartLevel);
-document.getElementById('btnDebug').addEventListener('click', () => { setDebugVisible(!getDebugVisible()); updateDebug(); updateColorTable(); });
+document.getElementById('btnDebug').addEventListener('click', toggleDebug);
 document.getElementById('btnClearScores').addEventListener('click', clearScores);
-document.getElementById('btnForceRefresh').addEventListener('click', () => { const url = new URL(location.href); url.searchParams.set('fresh', String(Date.now())); location.href = url.toString(); });
+document.getElementById('btnForceRefresh').addEventListener('click', forceRefresh);
 
 // --- Copy settings (2D only) ------------------------------------------------
 // A 2D HUD button that copies the current settings as ECMAScript:
@@ -969,6 +1066,7 @@ renderer.xr.addEventListener('sessionstart', () => {
   setMenuPrev(false);
   setAppearancePrev(false);
   setTriggerPrev(false);
+  exitButtonMesh.visible = true; // the board's Exit MR button is an in-session control
   resetWorldForMR();
   restartLevel(); // entering or leaving MR restarts the current board
 });
@@ -978,6 +1076,9 @@ renderer.xr.addEventListener('sessionend', () => {
   setExitTimer(null);
   gripHeld.fill(false); setDrag(null); setExitPending(false);
   exitMessageMesh.visible = false;
+  exitButtonMesh.visible = false;
+  exitButtonHover = false;
+  drawExitButton(false);
   if (getSkyMode() === 3) { setSkyMode(0); loadSky(); } // passthrough only exists inside the session
   // Use the Local closers, not the state-only setters: they hide the meshes
   // and pointer line and reset hover to -1. setMenuOpen(false) alone left
@@ -1117,6 +1218,22 @@ function updateMenuHover() {
   if (hover !== menuHover) { setMenuHover(hover); drawMenu(); }
 }
 
+// Same ray as the menu hover, but against the Exit MR button on the
+// board. Only while a session is running; the button is hidden in 2D.
+// The highlight is the only aiming feedback — the pointer line stays
+// a menu-only thing.
+function updateExitButtonHover() {
+  let hover = false;
+  if (renderer.xr.isPresenting && rightController && exitButtonMesh.visible) {
+    scene.updateMatrixWorld();
+    rightController.getWorldPosition(menuRaycaster.ray.origin);
+    rightController.getWorldQuaternion(menuRayQuat);
+    menuRaycaster.ray.direction.copy(menuRayDir.set(0, 0, -1).applyQuaternion(menuRayQuat));
+    if (menuRaycaster.intersectObject(exitButtonMesh)[0]) hover = true;
+  }
+  if (hover !== exitButtonHover) { exitButtonHover = hover; drawExitButton(hover); }
+}
+
 function activateMenuItem() {
   const menuOpenState = getMenuOpen();
   if (!menuOpenState) return;
@@ -1138,28 +1255,43 @@ function activateMenuItem() {
     else { resetWorldForMR(); setMessage('View reset.'); }
     updateHUD();
   } else if (selected === 3) {
-    const session = renderer.xr.getSession();
-    if (session) {
-      setExitPending(true);
-      setMessage(EXIT_MR_MESSAGE);
-      exitMessageMesh.visible = true;
-      updateHUD();
-      const timer = window.setTimeout(() => {
-        setExitTimer(null);
-        if (renderer.xr.getSession() !== session) return;
-        session.end().catch((error) => {
-          setExitPending(false);
-          exitMessageMesh.visible = false;
-          setMessage(`Could not exit MR: ${error instanceof Error ? error.message : String(error)}`);
-          updateHUD();
-        });
-      }, EXIT_MR_DELAY_MS);
-      setExitTimer(timer);
-    }
+    requestExitMR();
   }
 }
-controller0.addEventListener('selectstart', () => { if (controller0 === rightController) activateMenuItem(); });
-controller1.addEventListener('selectstart', () => { if (controller1 === rightController) activateMenuItem(); });
+
+// Shared by the Y menu's Exit MR row and the Exit MR button on the
+// board: a 3-second grace period (look forward; the view resets),
+// then the session ends. Ignored when no session is running, or when
+// an exit is already pending.
+function requestExitMR() {
+  if (getExitPending()) return;
+  const session = renderer.xr.getSession();
+  if (!session) return;
+  setExitPending(true);
+  setMessage(EXIT_MR_MESSAGE);
+  exitMessageMesh.visible = true;
+  updateHUD();
+  const timer = window.setTimeout(() => {
+    setExitTimer(null);
+    if (renderer.xr.getSession() !== session) return;
+    session.end().catch((error) => {
+      setExitPending(false);
+      exitMessageMesh.visible = false;
+      setMessage(`Could not exit MR: ${error instanceof Error ? error.message : String(error)}`);
+      updateHUD();
+    });
+  }, EXIT_MR_DELAY_MS);
+  setExitTimer(timer);
+}
+
+// Right trigger: the Y menu's rows when the menu is open, otherwise
+// the Exit MR button on the board when it is pointed at.
+function onRightSelectStart() {
+  if (getMenuOpen()) { activateMenuItem(); return; }
+  if (exitButtonHover) requestExitMR();
+}
+controller0.addEventListener('selectstart', () => { if (controller0 === rightController) onRightSelectStart(); });
+controller1.addEventListener('selectstart', () => { if (controller1 === rightController) onRightSelectStart(); });
 
 // --- Appearance panel -------------------------------------------------------
 // Opened with the RIGHT controller's B button; the panel rides on the right
@@ -1193,18 +1325,24 @@ const AP_ITEMS = [
 // (SESSION_DEFAULTS.appearance); this only converts them from hex to
 // the HSV the panel works in, then merges the saved appearance over
 // them, as before.
-const appearance = {
-  board: { ...cssToHsv(defAppearance.board.color), a: defAppearance.board.opacity },
-  boardIcons: { h: 0, s: 0, v: 1, a: defAppearance.boardIcons.opacity },
-  cube: { ...cssToHsv(defAppearance.cube.color), a: defAppearance.cube.opacity },
-  cubeIcons: { h: 0, s: 0, v: 1, a: defAppearance.cubeIcons.opacity },
-  grid: { ...cssToHsv(defAppearance.grid.color), a: 1 },
-  edges: { ...cssToHsv(defAppearance.edges.color), a: 1 },
-};
-for (const col of COLORS) {
-  appearance[`${col.shape}.fill`] = { ...cssToHsv(defAppearance[col.shape].fill), a: 1 };
+// v31: factored into a function so Reset defaults can rebuild the
+// same object on demand.
+function buildDefaultAppearance() {
+  const a = {
+    board: { ...cssToHsv(defAppearance.board.color), a: defAppearance.board.opacity },
+    boardIcons: { h: 0, s: 0, v: 1, a: defAppearance.boardIcons.opacity },
+    cube: { ...cssToHsv(defAppearance.cube.color), a: defAppearance.cube.opacity },
+    cubeIcons: { h: 0, s: 0, v: 1, a: defAppearance.cubeIcons.opacity },
+    grid: { ...cssToHsv(defAppearance.grid.color), a: 1 },
+    edges: { ...cssToHsv(defAppearance.edges.color), a: 1 },
+  };
+  for (const col of COLORS) {
+    a[`${col.shape}.fill`] = { ...cssToHsv(defAppearance[col.shape].fill), a: 1 };
+  }
+  a.shapeBorder = { ...cssToHsv(defAppearance.shapeBorder.color), a: 1, w: defAppearance.shapeBorder.width };
+  return a;
 }
-appearance.shapeBorder = { ...cssToHsv(defAppearance.shapeBorder.color), a: 1, w: defAppearance.shapeBorder.width };
+const appearance = buildDefaultAppearance();
 try {
   const saved = JSON.parse(localStorage.getItem(AP_STORAGE_KEY));
   const isOldCubeDefault = saved && saved.cube && (
@@ -1757,6 +1895,7 @@ renderer.setAnimationLoop(() => {
   if (input.menuButton && !menuPrev) setMenuOpenLocal(!getMenuOpen());
   setMenuPrev(input.menuButton);
   if (getMenuOpen()) updateMenuHover();
+  if (renderer.xr.isPresenting) updateExitButtonHover();
   
   const appearancePrev = getAppearancePrev();
   if (input.appearanceButton && !appearancePrev) setAppearanceOpenLocal(!getAppearanceOpen());

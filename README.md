@@ -41,7 +41,7 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
   `localStorage` under `cubeGameRecords` (like the appearance colours
   under `cubeGameAppearance`), sorted by score, then by time, and
   trimmed to 10. Bad or unavailable storage falls back to an empty list.
-- **Clear scores** (2D only): the **Clear scores (C)** button in the
+- **Clear scores** (2D only): the **Clear Scores (C)** button in the
   top-right button bar, or the **C** key, wipes the saved top 10 immediately
   (no undo) and restores the empty table. There is no clear control in
   MR; clear from the 2D panel before or after a session.
@@ -81,6 +81,12 @@ and Purple west.
   selection. Choosing **Exit MR** shows a 3-second reminder on a panel facing
   you above the table center, 0.4 m above eye height so it clears the board. Look forward; the Quest resets its
   front direction to where you are looking when the immersive session ends.
+  There is also an **Exit MR** button on the board itself, flat in the board
+  plane at the south-east corner — half the size it was, its right edge flush
+  with the board's east edge and its top edge flush with the south edge —
+  point the right controller at it (it highlights bright green) and pull
+  the trigger. It only shows while a session is running, and it runs the
+  same 3-second exit as the menu row.
   While the menu is open the thumbstick and trigger do not roll the cube or
   start a level.
   (On the Quest browser the left menu button is reported as button index 12
@@ -103,38 +109,50 @@ and Purple west.
   values as defaults.
 
 ### Desktop (for testing logic without a headset)
-- Arrow keys / WASD: roll.
+- Arrow keys: roll. (WASD used to roll; the letters are hotkeys now —
+  D debug, S copy settings, A reset all.)
 - Ctrl+Arrow keys: move the world (one cell, 0.2 m, per press; hold to slide). Ctrl+Up moves the board away from you, Ctrl+Down toward you, Ctrl+Left/Right sideways.
 - Q / E: rotate the world.
 - + / - or mouse wheel: scale the world (scroll up / + enlarges ×1.1, scroll down / - shrinks ×0.9).
 - 0: reset world position, rotation, and scale.
-  Home poses for 2D and MR are listed together in the `HOMES` table near the top
-  of `app/main.js`; the MR one is used by the Quest "Reset view" menu item and
-  when a session starts.
-- P: show/hide the debug readout (small grey text; see "Debug readout" below).
-  The **Debug (P)** button in the top-right button bar does the same, and also
+  Home poses for 2D and MR are the `boardHome_2D` / `boardHome_MR`
+  sections of `app/sessionConfig.js`; the MR one is used by the Quest
+  "Reset view" menu item and when a session starts.
+- D: show/hide the debug readout (small grey text; see "Debug readout" below).
+  The **Show Debug (D)** button in the top-right button bar does the same, and also
   refreshes the colour table at once, for use on the Quest where there
-  is no P key.
+  is no D key.
 - K: cycle the sky: adjusted, raw, off (black).
 - T: tilt the board up 5°; Shift+T tilts it down 5° (0–180°, same as
   grip + thumbstick in MR).
 - H: hide/show the whole top-left HUD panel. H again brings it
   back. (This was Space; Space is the standard key for activating a
   focused control, so it is left free for that — Enter and Space both
-  activate a focused button.)
-- C: clear the saved top-10 scores (no undo). The **Clear scores (C)**
+  activate a focused button.) The **Hide/Show Panel (H)** button in the
+  top-right bar does the same thing with the mouse.
+- C: clear the saved top-10 scores (no undo). The **Clear Scores (C)**
   button in the top-right button bar does the same.
-- Copy settings (2D only): the **Copy settings** button in the top-right
-  bar copies the current settings to the clipboard as one JSONC object with
-  five sections — `boardLayout` (the board geometry shared by both modes),
-  `boardHome_2D` (desktop home pose), `boardHome_MR` (Quest home pose),
-  `appearance` (everything the B-button panel edits, colours as hex), and
-  `skybox` (current mode, the four modes, whether passthrough is available).
-  If the clipboard write fails, the text is shown in a box with its own Copy
-  button instead.
+- Copy Settings (2D only): the **Copy Settings (S)** button in the top-right
+  bar, or the **S** key, copies the current settings to the clipboard as ECMAScript — an
+  `export const SESSION_DEFAULTS = { ... }` block with five sections:
+  `boardLayout` (the board geometry shared by both modes), `boardHome_2D`
+  (desktop home pose), `boardHome_MR` (Quest home pose), `appearance`
+  (everything the B-button panel edits, colours as hex), and `skybox`
+  (current mode only). Paste it
+  into `app/sessionConfig.js` to make the values the defaults. If the
+  clipboard write fails, the text is shown in a box with its own Copy button
+  instead.
+- Reset All (2D only): the **Reset All (A)** button in the top-right
+  bar, or the **A** key, clears the saved appearance from `localStorage`
+  and rebuilds it from the server defaults in `app/sessionConfig.js`;
+  the sky returns to the session default too. No undo, like Clear
+  scores. The top-10 scores are not touched.
+- F: force refresh (reload with a unique version string, bypassing
+  the cache). The **Force Refresh (F)** button does the same.
 - N: next level. R: restart the current level (same pattern, icons restored).
-- The buttons in the top-right bar do Next level / Restart level,
-  Debug, Copy settings, Clear scores and Force refresh.
+- The buttons in the top-right bar, in order, are Hide/Show Panel,
+  Next Level, Restart Level, Clear Scores, Show Debug, Copy Settings,
+  Force Refresh and Reset All.
 
 ## Repo layout — what is served, and what is not
 
@@ -147,7 +165,8 @@ CubeGameWebXR/                  repo root
   app/                          <-- web root: only this is served
     index.html                  served
     main.js                     served (loaded by index.html as ./main.js)
-    config.js                   served (constants, colours, storage keys)
+    config.js                   served (code constants, derived values, storage keys)
+    sessionConfig.js            served (session defaults: board layout, homes, appearance, skybox)
     state.js                    served (game state, incl. persisted scores)
     cube.js                     served (cube: six separate face planes)
     materials.js                served (cube/board/icon materials)
@@ -161,6 +180,23 @@ CubeGameWebXR/                  repo root
       starmap_2020_8k_raw.jpg   served (unadjusted sky, 8k)
       starmap_2020_4k_raw.jpg   served (unadjusted sky fallback)
 ```
+
+## Session defaults — `app/sessionConfig.js`
+
+The settings a fresh load starts from live in one file,
+`app/sessionConfig.js`, as `SESSION_DEFAULTS`: `boardLayout`
+(grid, board size, coloured fraction, roll time), `boardHome_2D`
+and `boardHome_MR` (position, tilt, scale), `appearance`
+(everything the B-button panel edits, colours as hex) and
+`skybox` (default mode). Edit the values there and reload; the
+file is in the build-timestamp check, so the HUD build date moves
+when it changes and you can tell the new file loaded. The Copy
+settings button dumps the live values in exactly this shape, so a
+copied dump pastes straight in. The saved appearance and scores in
+the browser still override these defaults at runtime; the **Reset
+All** button in the 2D top-right bar clears the saved
+appearance and restores these values (scores are not touched).
+
 
 `app/index.html`, `app/main.js` and its modules, and the sky images in `app/Assets/` need
 to be served. Icons are drawn on canvas in `app/textures.js`, and
