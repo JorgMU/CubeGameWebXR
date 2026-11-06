@@ -765,14 +765,15 @@ document.getElementById('btnDebug').addEventListener('click', () => { setDebugVi
 document.getElementById('btnClearScores').addEventListener('click', clearScores);
 document.getElementById('btnForceRefresh').addEventListener('click', () => { const url = new URL(location.href); url.searchParams.set('fresh', String(Date.now())); location.href = url.toString(); });
 
-// --- Copy debug dump (2D only) ------------------------------------------------
-// A 2D HUD button that copies everything worth knowing into the clipboard:
-// the debug readout, the colour table, every appearance value, the home
-// poses and the session records. In 2D the page is focused and the click
-// is a user gesture, so navigator.clipboard.writeText() works there —
-// inside an immersive session it does not reliably (no page focus, and a
-// controller trigger is not the gesture the browser wants), which is why
-// this button lives in the 2D HUD only and there is no in-headset copy.
+// --- Copy settings (2D only) ------------------------------------------------
+// A 2D HUD button that copies the current settings as one JSONC object:
+// gameboard2D, gameboardMR, appearance, skybox. Colours are hex, as in
+// config.js, so the dump pastes straight into a settings file. In 2D the
+// page is focused and the click is a user gesture, so
+// navigator.clipboard.writeText() works there — inside an immersive
+// session it does not reliably (no page focus, and a controller trigger
+// is not the gesture the browser wants), which is why this button lives
+// in the 2D HUD only and there is no in-headset copy.
 // If the clipboard write fails (or the API is unavailable), the dump is
 // shown in a textbox instead — the pattern other pages use with an
 // iframe + textbox + copy button, done here as a plain overlay because
@@ -781,30 +782,64 @@ document.getElementById('btnForceRefresh').addEventListener('click', () => { con
 const copyOverlay = document.getElementById('copyOverlay');
 const copyText = document.getElementById('copyText');
 
-function buildDebugDump() {
-  updateColorTable();
+function buildSettingsDump() {
+  const ap = getAppearance();
+  const hex = (e) => hsvCss(e.h, e.s, e.v);
+  const d = HOMES.desktop, m = HOMES.mr;
   const orientation = getOrientation();
+  // JSONC: JSON with // comments. JSON.stringify cannot emit comments, so
+  // each section is stringified on its own and the comment lines are
+  // added around it. The result still parses as JSON once the comment
+  // lines are stripped, and it is the shape a config.jsonc file would use.
+  const ind = (v, n) => JSON.stringify(v, null, 2).split('\n').join('\n' + ' '.repeat(n));
+  const settings = {
+    gameboard2D: {
+      position: { x: d.position.x, y: d.position.y, z: d.position.z },
+      tilt: d.tilt,
+      scale: d.scale,
+      grid: GRID,
+      boardSize: BOARD_SIZE,
+      coloredFraction: COLORED_FRACTION,
+      rollSeconds: ROLL_SECONDS,
+    },
+    gameboardMR: {
+      position: { x: m.position.x, y: m.position.y, z: m.position.z },
+      tilt: m.tilt,
+      scale: m.scale,
+    },
+    appearance: {
+      board: { color: hex(ap.board), opacity: ap.board.a },
+      boardIcons: { opacity: ap.boardIcons.a },
+      cube: { color: hex(ap.cube), opacity: ap.cube.a },
+      cubeIcons: { opacity: ap.cubeIcons.a },
+      grid: { color: hex(ap.grid) },
+      edges: { color: hex(ap.edges) },
+      shapeBorder: { color: hex(ap.shapeBorder), width: ap.shapeBorder.w },
+      ...Object.fromEntries(COLORS.map((col) => [col.shape, { fill: hex(ap[`${col.shape}.fill`]) }])),
+    },
+    skybox: {
+      mode: SKY_MODES[getSkyMode()],
+      modes: SKY_MODES,
+      passthroughAvailable: passthroughAvailable(),
+    },
+  };
   const lines = [];
-  lines.push(`CubeGameWebXR debug dump — ${new Date().toISOString()}`);
-  lines.push(`Build: ${BUILD_TIMESTAMP}`);
-  lines.push('');
-  lines.push('--- Game ---');
-  lines.push(`Level: ${getLevel()}  Remaining: ${getRemaining()}  Score: ${getLevelScore()}  Time: ${getLevelStartedAt() === null ? 'Ready' : formatTime(elapsedLevelSeconds())}  Face down: ${COLORS[orientation.down].name}`);
-  lines.push('');
-  lines.push('--- Debug ---');
-  lines.push(debugLines().join('\n'));
-  lines.push('');
-  lines.push('--- Colours ---');
-  lines.push(hudColors.textContent.trim());
-  lines.push('');
-  lines.push('--- Appearance (all user-editable values) ---');
-  lines.push(JSON.stringify(getAppearance(), null, 2));
-  lines.push('');
-  lines.push('--- Homes & config ---');
-  lines.push(JSON.stringify({ grid: GRID, boardSize: BOARD_SIZE, coloredFraction: COLORED_FRACTION, rollSeconds: ROLL_SECONDS, homes: HOMES, skyMode: SKY_MODES[getSkyMode()] }, null, 2));
-  lines.push('');
-  lines.push('--- Session records (top 10) ---');
-  lines.push(JSON.stringify(getSessionRecords(), null, 2));
+  lines.push('// CubeGameWebXR settings — copied ' + new Date().toISOString());
+  lines.push('// Build: ' + BUILD_TIMESTAMP + ' — Level ' + getLevel() + ', ' + getRemaining() + ' remaining, face down ' + COLORS[orientation.down].name);
+  lines.push('// These are the live values (saved appearance included). Paste into');
+  lines.push('// app/config.jsonc to make them the defaults — but note the saved');
+  lines.push('// appearance in this browser still wins until it is cleared.');
+  lines.push('{');
+  lines.push('  // 2D gameboard (desktop browser) home pose; board geometry is shared by 2D and MR');
+  lines.push('  "gameboard2D": ' + ind(settings.gameboard2D, 2) + ',');
+  lines.push('  // MR gameboard (Quest passthrough) home pose');
+  lines.push('  "gameboardMR": ' + ind(settings.gameboardMR, 2) + ',');
+  lines.push('  // Appearance — everything editable from the B-button panel. Colours are hex, opacity 0–1.');
+  lines.push('  // boardIcons / cubeIcons are opacity-only: their shapes take their colour from the Fill items.');
+  lines.push('  "appearance": ' + ind(settings.appearance, 2) + ',');
+  lines.push('  // Skybox — Passthrough only exists inside an MR session; leaving a session resets it to Adjusted');
+  lines.push('  "skybox": ' + ind(settings.skybox, 2));
+  lines.push('}');
   return lines.join('\n');
 }
 
@@ -821,7 +856,7 @@ function closeCopyOverlay() {
 
 async function copyTextFromOverlay() {
   const text = copyText.value;
-  const done = () => { closeCopyOverlay(); setMessage('Debug info copied to clipboard.'); updateHUD(); };
+  const done = () => { closeCopyOverlay(); setMessage('Settings copied to clipboard.'); updateHUD(); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     try { await navigator.clipboard.writeText(text); done(); return; } catch (e) { /* fall through */ }
   }
@@ -834,12 +869,12 @@ async function copyTextFromOverlay() {
   updateHUD();
 }
 
-async function copyDebugDump() {
-  const text = buildDebugDump();
+async function copySettingsDump() {
+  const text = buildSettingsDump();
   if (navigator.clipboard && navigator.clipboard.writeText) {
     try {
       await navigator.clipboard.writeText(text);
-      setMessage('Debug info copied to clipboard.');
+      setMessage('Settings copied to clipboard.');
       updateHUD();
       return;
     } catch (e) { /* fall through to the textbox */ }
@@ -848,7 +883,7 @@ async function copyDebugDump() {
   setMessage('Clipboard write failed — copy the text from the box.');
   updateHUD();
 }
-document.getElementById('btnCopyDebug').addEventListener('click', copyDebugDump);
+document.getElementById('btnCopySettings').addEventListener('click', copySettingsDump);
 document.getElementById('btnCopyText').addEventListener('click', copyTextFromOverlay);
 document.getElementById('btnCopyClose').addEventListener('click', closeCopyOverlay);
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && copyOverlay.classList.contains('open')) closeCopyOverlay(); });
