@@ -779,6 +779,13 @@ function finishRoll() {
 // --- Desktop keys ---------------------------------------------------------------
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
+  // v33: while a confirmation dialog is open, every key but Escape is
+  // ignored (Escape closes it). This goes before Ctrl+Arrow so the
+  // world cannot move under the dialog either.
+  if (confirmOverlay.classList.contains('open')) {
+    if (k === 'escape') closeConfirm();
+    return;
+  }
   // Ctrl+Arrow moves the world instead of rolling the cube (desktop
   // testing). Scene axes, so Ctrl+Up always moves the board away from
   // the player on screen, regardless of any world yaw rotation. One
@@ -792,34 +799,32 @@ window.addEventListener('keydown', (e) => {
     else if (k === 'arrowright') worldGroup.position.x += step;
     return;
   }
-  // v32: arrow keys roll the cube; WASD no longer rolls — D, S and A
-  // are hotkeys now (debug, copy settings, reset all), so the letters
-  // had to go. Ctrl+Arrow above still moves the world.
-  if (k === 'arrowup') tryRoll('north');
-  else if (k === 'arrowdown') tryRoll('south');
-  else if (k === 'arrowleft') tryRoll('west');
-  else if (k === 'arrowright') tryRoll('east');
+  // v33: arrow keys and WASD both roll again — D, S and A are free
+  // now that debug is *, copy is C and the resets are O and H.
+  // TAB hides the panel (preventDefault stops the browser moving
+  // focus instead).
+  if (k === 'tab') { e.preventDefault(); toggleHudPanel(); }
+  else if (k === 'arrowup' || k === 'w') tryRoll('north');
+  else if (k === 'arrowdown' || k === 's') tryRoll('south');
+  else if (k === 'arrowleft' || k === 'a') tryRoll('west');
+  else if (k === 'arrowright' || k === 'd') tryRoll('east');
   else if (k === 'n') nextLevel();
   else if (k === 'r') restartLevel();
   else if (k === 'q') worldGroup.rotateOnWorldAxis(WORLD_UP, Math.PI / 12);
   else if (k === 'e') worldGroup.rotateOnWorldAxis(WORLD_UP, -Math.PI / 12);
   else if (k === '=' || k === '+') worldGroup.scale.multiplyScalar(1.1);
   else if (k === '-' || k === '_') worldGroup.scale.multiplyScalar(0.9);
-  else if (k === 'd') toggleDebug(); // D: show debug info (was P)
-  else if (k === 'c') clearScores(); // clear the persisted top-10 scores (no undo)
-  else if (k === 'h') toggleHudPanel(); // H: hide/show the top-left HUD panel (2D mode). Was Space; Space is the standard key for activating a focused control, so it is left free for that.
-  else if (k === 's') copySessionConfig(); // S: copy settings
+  else if (k === '*') toggleDebug(); // *: show debug info (was D, was P)
+  else if (k === 'x') requestClearScores(); // X: clear the persisted top-10 scores (asks first, no undo)
+  else if (k === 'c') copySessionConfig(); // C: copy settings
   else if (k === 'f') forceRefresh(); // F: force refresh
-  else if (k === 'a') resetDefaults(); // A: reset all settings to the server defaults (no undo)
+  else if (k === 'o') requestResetColors(); // O: reset colours to the server defaults (asks first, no undo)
+  else if (k === 'h') resetHome(); // H: reset the board to its home position
+  else if (k === '[') stepTilt(1); // [: tilt board up
+  else if (k === ']') stepTilt(-1); // ]: tilt board down
   else if (k === 't') stepTilt(e.shiftKey ? -1 : 1); // desktop tilt: T up, Shift+T down (was missing in 2D mode)
   else if (k === 'k') toggleSky();
-  else if (k === '0') {
-    if (renderer.xr.isPresenting) { resetWorldForMR(); return; }
-    worldGroup.position.copy(HOME_2D.position);
-    worldGroup.quaternion.copy(homeQuat(HOME_2D));
-    setTiltDeg(HOME_2D.tilt);
-    worldGroup.scale.setScalar(HOME_2D.scale);
-  }
+  else if (k === '0') resetHome();
 });
 // Mouse wheel scales the world, exactly like +/- on the keyboard:
 // scroll up enlarges (x1.1), scroll down shrinks (x0.9). passive: false
@@ -828,24 +833,60 @@ window.addEventListener('wheel', (e) => {
   e.preventDefault();
   worldGroup.scale.multiplyScalar(e.deltaY < 0 ? 1.1 : 0.9);
 }, { passive: false });
-// v31: Hide panel (H) — the same toggle as the H key, as a button, so
-// the panel can be hidden and brought back with the mouse. The button
-// lives in #hudButtons, outside #hud, so it stays visible while the
-// panel is hidden.
-// v32: the label is now a fixed "Hide/Show Panel (H)" — it no longer
-// flips with the panel's state.
+// v31: Hide panel — the same toggle as the H key used to be, as a
+// button, so the panel can be hidden and brought back with the mouse.
+// v33: the key is TAB now, and hiding the panel also hides every
+// button in the top-right bar except Hide/Show itself (so you can
+// bring it all back) — the MR button is separate and stays. The
+// label is a fixed "Hide/Show Panel" with a TAB keycap.
 const btnHidePanel = document.getElementById('btnHidePanel');
 function toggleHudPanel() {
-  hud.style.display = hud.style.display === 'none' ? '' : 'none';
+  const hidden = hud.style.display === 'none';
+  hud.style.display = hidden ? '' : 'none';
+  document.querySelectorAll('#hudButtons button').forEach((b) => {
+    if (b.id !== 'btnHidePanel') b.style.display = hidden ? '' : 'none';
+  });
 }
 btnHidePanel.addEventListener('click', toggleHudPanel);
 
-// v31: Reset defaults — clears the saved appearance (and nothing else)
-// and rebuilds it from the session defaults in sessionConfig.js, then
-// re-applies everything the same way startup does. The sky goes back
-// to the session default too. The top-10 scores are NOT touched (that
-// is Clear scores' job). No undo, like Clear scores.
-function resetDefaults() {
+// v33: confirmation dialog for the two destructive actions (Reset
+// Colors, Clear Scores). Same dark-box pattern as the copy overlay.
+// The action runs only when Confirm is pressed; Cancel and Escape
+// just close it. While it is open the game key handler ignores
+// every key but Escape (see above).
+const confirmOverlay = document.getElementById('confirmOverlay');
+const confirmText = document.getElementById('confirmText');
+let confirmCallback = null;
+function askConfirm(message, onConfirm) {
+  confirmText.textContent = message;
+  confirmCallback = onConfirm;
+  confirmOverlay.classList.add('open');
+}
+function closeConfirm() {
+  confirmOverlay.classList.remove('open');
+  confirmCallback = null;
+}
+document.getElementById('btnConfirmYes').addEventListener('click', () => {
+  const cb = confirmCallback;
+  closeConfirm();
+  if (cb) cb();
+});
+document.getElementById('btnConfirmNo').addEventListener('click', closeConfirm);
+function requestClearScores() {
+  askConfirm('Clear the saved top-10 scores? This can\'t be undone.', clearScores);
+}
+function requestResetColors() {
+  askConfirm('Reset all colours to the server defaults? This clears your saved colours and can\'t be undone.', resetColors);
+}
+
+// v33: Reset Colors — the old Reset All split in two. This half clears
+// the saved appearance (and nothing else) and rebuilds it from the
+// session defaults in sessionConfig.js, then re-applies everything
+// the same way startup does. The sky goes back to the session default
+// too. The top-10 scores are NOT touched (that is Clear Scores' job).
+// No undo — the caller asks for confirmation first (see
+// requestResetColors).
+function resetColors() {
   try { localStorage.removeItem(AP_STORAGE_KEY); } catch { /* ignore */ }
   setAppearance(buildDefaultAppearance());
   const defaultSky = SKY_MODES.indexOf(SESSION_DEFAULTS.skybox.mode);
@@ -860,10 +901,26 @@ function resetDefaults() {
   setCubeColorDirty(true);
   flushAppearance();
   updateColorTable();
-  setMessage('Settings reset to the server defaults.');
+  setMessage('Colours reset to the server defaults.');
   updateHUD();
 }
-document.getElementById('btnResetDefaults').addEventListener('click', resetDefaults);
+document.getElementById('btnResetColors').addEventListener('click', requestResetColors);
+
+// v33: Reset Home — the board back to its home position, tilt and
+// scale (2D home on desktop, MR home in a session). This used to be
+// inline in the 0 key; the Reset Home button and the H key use it now.
+function resetHome() {
+  if (renderer.xr.isPresenting) { resetWorldForMR(); }
+  else {
+    worldGroup.position.copy(HOME_2D.position);
+    worldGroup.quaternion.copy(homeQuat(HOME_2D));
+    setTiltDeg(HOME_2D.tilt);
+    worldGroup.scale.setScalar(HOME_2D.scale);
+  }
+  setMessage('View reset.');
+  updateHUD();
+}
+document.getElementById('btnResetHome').addEventListener('click', resetHome);
 
 // v32: named so the D and F keys can call the same actions as the buttons.
 function toggleDebug() { setDebugVisible(!getDebugVisible()); updateDebug(); updateColorTable(); }
@@ -875,8 +932,14 @@ function forceRefresh() {
 document.getElementById('btnNext').addEventListener('click', nextLevel);
 document.getElementById('btnRestart').addEventListener('click', restartLevel);
 document.getElementById('btnDebug').addEventListener('click', toggleDebug);
-document.getElementById('btnClearScores').addEventListener('click', clearScores);
+document.getElementById('btnClearScores').addEventListener('click', requestClearScores);
 document.getElementById('btnForceRefresh').addEventListener('click', forceRefresh);
+// v33: Tilt and Zoom buttons — the same actions as the [ ] and +/-
+// keys, for clicking.
+document.getElementById('btnTiltUp').addEventListener('click', () => stepTilt(1));
+document.getElementById('btnTiltDown').addEventListener('click', () => stepTilt(-1));
+document.getElementById('btnZoomIn').addEventListener('click', () => worldGroup.scale.multiplyScalar(1.1));
+document.getElementById('btnZoomOut').addEventListener('click', () => worldGroup.scale.multiplyScalar(0.9));
 
 // --- Copy settings (2D only) ------------------------------------------------
 // A 2D HUD button that copies the current settings as ECMAScript:
