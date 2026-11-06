@@ -6,6 +6,22 @@ import { SESSION_DEFAULTS } from './sessionConfig.js';
 
 let renderer, scene, camera, worldGroup;
 
+// The desktop viewpoint, as set in initScene. During a session
+// three.js drives this same camera from the headset, and on
+// sessionend it keeps the headset's last pose — so the session end
+// handler calls resetCameraToDesktop() to put the 2D view back.
+// Without it the board looks tilted/rotated/translated after leaving
+// MR, and Reset Home (which moves the board, not the camera) appears
+// to do nothing. A page reload fixed it only because initScene
+// re-applied this pose.
+const DESKTOP_CAMERA_POS = new THREE.Vector3(0, 4.2, 1.8);
+const DESKTOP_CAMERA_TARGET = new THREE.Vector3(0, 1.0, -2.0);
+
+export function resetCameraToDesktop() {
+  camera.position.copy(DESKTOP_CAMERA_POS);
+  camera.lookAt(DESKTOP_CAMERA_TARGET);
+}
+
 export function initScene() {
   // Renderer
   const canvas = document.getElementById('renderCanvas');
@@ -50,10 +66,12 @@ export function initScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
 
-  // Camera
+  // Camera. The desktop viewpoint is high and behind the board,
+  // looking down at it; resetCameraToDesktop() above restores exactly
+  // this pose.
   camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
-  camera.position.set(0, 4.2, 1.8);
-  camera.lookAt(0, 1.0, -2.0);
+  camera.position.copy(DESKTOP_CAMERA_POS);
+  camera.lookAt(DESKTOP_CAMERA_TARGET);
 
   // Lighting
   scene.add(new THREE.AmbientLight(0xffffff, 0.7));

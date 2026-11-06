@@ -69,7 +69,7 @@ import {
 } from './state.js';
 
 // Import scene and rendering modules
-import { initScene, getRenderer, getScene, getCamera, getWorldGroup, xrGetSession, xrIsPresenting } from './scene.js';
+import { initScene, getRenderer, getScene, getCamera, getWorldGroup, xrGetSession, xrIsPresenting, resetCameraToDesktop } from './scene.js';
 import { initShapeStyles, shapeStyles, drawIcon, makeIconTexture, redrawIconTexture, createIconTextures, createCubeIconTextures } from './textures.js';
 // (board/grid/panel materials are created inline in main.js, as in the pre-refactor version)
 import { initCube, getCube, getCubeMaterials, getCubeShapeMaterials, getCubeFaceColorIndices } from './cube.js';
@@ -222,24 +222,49 @@ worldGroup.add(cube);
 
 // --- In-world status text (tilted up beyond the far edge) ---
 // Past the north edge, tilted 30 degrees up from the board plane and facing
-// the player on the south side. No background or border.
+// the player on the south side. As wide as the board (2.0 m) and just
+// tall enough to hold the text. In MR a thin border in the grid colour
+// frames it (see panelBorder below); in 2D there is no border.
 const panelCanvas = document.createElement('canvas');
-panelCanvas.width = 1024; panelCanvas.height = 288;
+panelCanvas.width = 1152; panelCanvas.height = 288;
 const panelCtx = panelCanvas.getContext('2d');
 const panelTexture = new THREE.CanvasTexture(panelCanvas);
 panelTexture.colorSpace = THREE.SRGBColorSpace;
 const panel = new THREE.Mesh(
-  new THREE.PlaneGeometry(1.8, 0.5),
+  new THREE.PlaneGeometry(2.0, 0.5),
   new THREE.MeshBasicMaterial({ map: panelTexture, transparent: true, side: THREE.DoubleSide })
 );
 panel.rotation.x = -Math.PI / 3;
 panel.position.set(0, 0.1, -BOARD_LAYOUT.boardSize / 2 - 0.35);
 worldGroup.add(panel);
 
+// v38: a border around the status text, drawn with the same thin lines
+// as the grid (a LineBasicMaterial in the grid colour, kept in step by
+// applyLineColors). It hugs the panel edge — as wide as the board, just
+// tall enough for the text — and is a child of the panel so it follows
+// its tilt, set a hair in front of the panel face so it does not
+// z-fight with the texture. MR only: in 2D the status lives on the HUD
+// panel, so the border is shown by sessionstart and hidden by sessionend.
+const panelBorderMaterial = new THREE.LineBasicMaterial({ color: gridColorHex });
+const panelBorder = new THREE.LineSegments(
+  new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-1.0, -0.25, 0), new THREE.Vector3(1.0, -0.25, 0),
+    new THREE.Vector3(1.0, -0.25, 0), new THREE.Vector3(1.0, 0.25, 0),
+    new THREE.Vector3(1.0, 0.25, 0), new THREE.Vector3(-1.0, 0.25, 0),
+    new THREE.Vector3(-1.0, 0.25, 0), new THREE.Vector3(-1.0, -0.25, 0),
+  ]),
+  panelBorderMaterial
+);
+panelBorder.position.z = 0.002;
+panelBorder.visible = false;
+panel.add(panelBorder);
+
 // --- Debug readout (small grey text) -------------------------------------------
 // Shows where the viewer is and how the board is posed. Both are in the same
 // scene (tracking-space) coordinates, so the numbers can be compared directly.
 // Toggle with the P key; refreshed a few times a second, not every frame.
+// v38: this in-world panel is MR only — in 2D the readout lives in the HUD
+// panel below the scores (see updateDebug).
 const debugCanvas = document.createElement('canvas');
 debugCanvas.width = 1024; debugCanvas.height = 350;
 const debugCtx = debugCanvas.getContext('2d');
@@ -261,7 +286,10 @@ worldGroup.add(debugPanel);
 
 // --- Top 10 Scores (flat in the board plane, left of the board) ---------------
 // 640 px per metre, so the 52 px text matches the 46 px text on the main panel
-// (1024 px across 1.8 m) in physical size.
+// (1152 px across 2.0 m) in physical size.
+// v38: hidden in 2D — the side text is too hard to read from the desktop
+// camera, and the scores already live on the HUD panel. Shown by
+// sessionstart, hidden by sessionend, so it is an MR-only panel now.
 const SCORES_W = 0.9, SCORES_H = 1.3;
 const SCORES_FONT = 52;
 const scoresCanvas = document.createElement('canvas');
@@ -276,11 +304,12 @@ const scoresPanel = new THREE.Mesh(
 scoresPanel.rotation.x = -Math.PI / 2;
 // Top edge level with the board's far edge, with a small gap on the left.
 scoresPanel.position.set(-BOARD_LAYOUT.boardSize / 2 - SCORES_W / 2 - 0.05, 0.012, -BOARD_LAYOUT.boardSize / 2 + SCORES_H / 2);
+scoresPanel.visible = false; // MR only — see the comment above
 worldGroup.add(scoresPanel);
 
-// --- Exit MR button (flat in the board plane, north-east corner) ----------
-// Just past the north (far) edge at the east end, in front of the status
-// panel. It only shows while an MR
+// --- Exit MR button (flat in the board plane, south edge, centred) ----------
+// Just past the south (near) edge, centred, so it sits just in front of
+// the player at the bottom edge. It only shows while an MR
 // session is running — there is nothing to exit in 2D — and it is
 // operated the same way as the Y menu: point the RIGHT controller at
 // it and pull the trigger. Pointing at it highlights it bright green.
@@ -292,9 +321,9 @@ worldGroup.add(scoresPanel);
 // instead of it hugging the edge. (The gap was 0.4 m at first; that
 // put the button too low — south is downhill with the board's 30° MR
 // tilt — so it is 0.04 m.)
-// v36: moved from the south-east corner to the north-east one. The
-// status panel's lower edge sits ~0.02 m north of it, so it fits just
-// in front of the panel, in the board plane.
+// v36: tried at the north-east corner, but too far away to use there;
+// now centred on the south edge, just off the bottom edge as it was
+// before, only centred instead of at the corner.
 const EXIT_BUTTON_W = 0.275, EXIT_BUTTON_H = 0.06875;
 const exitButtonCanvas = document.createElement('canvas');
 exitButtonCanvas.width = 512; exitButtonCanvas.height = 128;
@@ -328,9 +357,9 @@ const exitButtonMesh = new THREE.Mesh(
 );
 exitButtonMesh.rotation.x = -Math.PI / 2;
 exitButtonMesh.position.set(
-  BOARD_LAYOUT.boardSize / 2 - EXIT_BUTTON_W / 2,
   0,
-  -(BOARD_LAYOUT.boardSize / 2 + EXIT_BUTTON_H / 2 + 0.04)
+  0,
+  BOARD_LAYOUT.boardSize / 2 + EXIT_BUTTON_H / 2 + 0.04
 );
 exitButtonMesh.visible = false; // shown by sessionstart, hidden by sessionend
 worldGroup.add(exitButtonMesh);
@@ -410,7 +439,10 @@ function updateDebug() {
   const lines = debugLines();
   const debugVisible = getDebugVisible();
   hudDebug.style.display = debugVisible ? 'block' : 'none';
-  debugPanel.visible = debugVisible;
+  // v38: the in-world debug panel is MR only — in 2D the readout lives
+  // in the HUD panel below the scores, since the side text is too hard
+  // to read from the desktop camera.
+  debugPanel.visible = debugVisible && renderer.xr.isPresenting;
   if (!debugVisible) return;
   hudDebug.textContent = lines.join('\n');
   debugCtx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
@@ -540,18 +572,18 @@ function updateHUD() {
 
 // In-world panel: text only, no background fill and no border.
 function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, message) {
-  panelCtx.clearRect(0, 0, 1024, 288);
+  panelCtx.clearRect(0, 0, 1152, 288);
   panelCtx.fillStyle = '#ffffff';
   panelCtx.font = 'bold 46px system-ui, sans-serif';
   panelCtx.textAlign = 'center';
-  panelCtx.fillText(`Level ${level}   Remaining: ${remaining}`, 512, 58);
-  panelCtx.fillText(`Time: ${levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds())}   Score: ${levelScore}`, 512, 124);
+  panelCtx.fillText(`Level ${level}   Remaining: ${remaining}`, 576, 58);
+  panelCtx.fillText(`Time: ${levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds())}   Score: ${levelScore}`, 576, 124);
   // v36: 'Face down:' stays white; only the colour word takes the colour.
   panelCtx.font = 'bold 42px system-ui, sans-serif';
   const faceLabel = 'Face down: ';
   const faceLabelW = panelCtx.measureText(faceLabel).width;
   const faceNameW = panelCtx.measureText(down.name).width;
-  const faceX = 512 - (faceLabelW + faceNameW) / 2;
+  const faceX = 576 - (faceLabelW + faceNameW) / 2;
   panelCtx.textAlign = 'left';
   panelCtx.fillStyle = '#ffffff';
   panelCtx.fillText(faceLabel, faceX, 184);
@@ -560,7 +592,7 @@ function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, mes
   panelCtx.textAlign = 'center';
   panelCtx.fillStyle = '#ffffff';
   panelCtx.font = '32px system-ui, sans-serif';
-  panelCtx.fillText(message.length > 58 ? message.slice(0, 58) + '…' : message, 512, 248);
+  panelCtx.fillText(message.length > 58 ? message.slice(0, 58) + '…' : message, 576, 248);
   panelTexture.needsUpdate = true;
 }
 
@@ -982,6 +1014,12 @@ function resetHome() {
     worldGroup.quaternion.copy(homeQuat(HOME_2D));
     setTiltDeg(HOME_2D.tilt);
     worldGroup.scale.setScalar(HOME_2D.scale);
+    // v37: Reset Home resets the player too, not just the board.
+    // Coming out of MR leaves the camera at the headset's last pose
+    // (the headset's own centre adjustment), so the view stays wrong
+    // even with the board home. In a session the headset owns the
+    // camera, so this only applies on desktop.
+    resetCameraToDesktop();
   }
   setMessage('View reset.');
   updateHUD();
@@ -1206,6 +1244,9 @@ renderer.xr.addEventListener('sessionstart', () => {
   setAppearancePrev(false);
   setTriggerPrev(false);
   exitButtonMesh.visible = true; // the board's Exit MR button is an in-session control
+  scoresPanel.visible = true; // the side panels and the status border are MR only
+  panelBorder.visible = true;
+  updateDebug(); // refresh the in-world debug panel's visibility right away
   resetWorldForMR();
   restartLevel(); // entering or leaving MR restarts the current board
 });
@@ -1218,6 +1259,9 @@ renderer.xr.addEventListener('sessionend', () => {
   exitButtonMesh.visible = false;
   exitButtonHover = false;
   drawExitButton(false);
+  scoresPanel.visible = false;
+  panelBorder.visible = false;
+  updateDebug(); // hides the in-world debug panel right away
   exitLaser.visible = false;
   exitLaserUntil = 0;
   if (getSkyMode() === 3) { setSkyMode(0); loadSky(); } // passthrough only exists inside the session
@@ -1238,6 +1282,7 @@ renderer.xr.addEventListener('sessionend', () => {
   worldGroup.quaternion.copy(homeQuat(HOME_2D));
   setTiltDeg(HOME_2D.tilt);
   worldGroup.scale.setScalar(HOME_2D.scale);
+  resetCameraToDesktop(); // the session leaves the camera at the headset's last pose
   restartLevel();
 });
 
@@ -1666,6 +1711,7 @@ function applyLineColors() {
   for (let i = 0; i < colors.count; i++) colors.setXYZ(i, c.r, c.g, c.b);
   colors.needsUpdate = true;
   grid.material.color.set(0xffffff);
+  panelBorderMaterial.color.copy(c); // the status border is a grid line too
   cubeEdgeMaterial.color.set(hsvCss(e.h, e.s, e.v));
 }
 function applyShapeStyles() {

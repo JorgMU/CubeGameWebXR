@@ -35,7 +35,7 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 - The clock starts on your first move of a level. Each match is worth
   180 points minus one point per elapsed second (minimum 0).
 - Completing a level adds a record (level, score, time, date) to the
-  top 10, shown in the HUD table ("Top 10 Scores") and on the scores
+  top 10, shown in the HUD table ("Top 10 Scores") and, in MR, on the scores
   panel beside the board in the world.
 - The top 10 **persist across sessions**: they are saved in
   `localStorage` under `cubeGameRecords` (like the appearance colours
@@ -85,17 +85,17 @@ and Purple west.
   you above the table center, 0.4 m above eye height so it clears the board. Look forward; the Quest resets its
   front direction to where you are looking when the immersive session ends.
   There is also an **Exit MR** button on the board itself, flat in the board
-  plane at the north-east corner — half the size it was, its right edge flush
-  with the board's east edge, at the board's own level (y 0) and 0.04 m north
-  of the north edge, so there is a clear gap between it and the board (it sits
-  just in front of the status panel) — point the right controller at it (it
+  plane, centred on the south edge — half the size it was, at the board's
+  own level (y 0) and 0.04 m south of the south edge, so there is a clear
+  gap between it and the board — point the right controller at it (it
   highlights bright green, and a green laser draws from the controller to the
   button; when you point away the laser stays for 2 s, still following where
   the controller points, fading out) and pull the trigger. When nobody is
-  pointing at it its background is 95% transparent, so it sits quietly in
-  the corner as dark-green text and a border. It only shows
+  pointing at it its background is 95% transparent, so it sits quietly
+  at the bottom edge as dark-green text and a border. It only shows
   while a session is running, and it runs the same 3-second exit as the
-  menu row. Coming out of a session puts the board back at the 2D home pose.
+  menu row. Coming out of a session puts the board back at the 2D home pose
+  and the camera back to the desktop viewpoint.
   While the menu is open the thumbstick and trigger do not roll the cube or
   start a level.
   (On the Quest browser the left menu button is reported as button index 12
@@ -124,7 +124,11 @@ and Purple west.
 - Q / E (or < / >): rotate the world. The **Rotate Left** /
   **Rotate Right** buttons do the same.
 - + / - or mouse wheel: scale the world (scroll up / + enlarges ×1.1, scroll down / - shrinks ×0.9). The **Zoom In** / **Zoom Out** buttons do the same.
-- 0 or H: reset world position, rotation, and scale. The **Reset Home** button does the same.
+- 0 or H: reset the board to its home position, rotation, and scale — and,
+  in 2D, the camera viewpoint too (coming out of MR leaves the camera at
+  the headset's last pose, so Reset Home fixes the player as well as the
+  board). The **Reset Home** button does the same. In a session the headset
+  owns the camera, so there it resets the board only.
   Home poses for 2D and MR are the `boardHome_2D` / `boardHome_MR`
   sections of `app/sessionConfig.js`; the MR one is used by the Quest
   "Reset Home" menu item and when a session starts.
@@ -140,11 +144,10 @@ and Purple west.
   buttons. TAB again brings them back. The **Hide/Show Panel** button
   does the same with the mouse; only it and the MR button stay visible
   while everything is hidden.
-- ?: show/hide the help panel (bottom left — debug readout, colour
-  table, help text). The **Show/Hide Help** button does the same. The
-  help panel is off by default; the main panel keeps only the live
-  status (level, time, score, face down, message, build date) and the
-  session scores.
+- ?: show/hide the help panel (bottom left — colour table, help text). The **Show/Hide Help** button does the same. The
+  help panel is off by default; the main panel keeps the live
+  status (level, time, score, face down, message, build date), the
+  session scores, and the debug readout below the scores when it is on.
 - X: clear the saved top-10 scores (asks for confirmation; no undo). The **Clear Scores**
   button in the top-right button bar does the same.
 - Copy Settings (2D only): the **Copy Settings** button in the top-right
@@ -163,7 +166,8 @@ and Purple west.
   the sky returns to the session default too. Asks for confirmation;
   no undo. The top-10 scores are not touched.
 - Reset Home: the **Reset Home** button, or the **H** key (or 0),
-  returns the board to its home position, tilt and scale.
+  returns the board to its home position, tilt and scale — and, in 2D,
+  the camera to the desktop viewpoint too.
 - F: force refresh (reload with a unique version string, bypassing
   the cache). The **Force Refresh** button does the same.
 - N: next level. R: restart the current level (same pattern, icons restored).
@@ -327,9 +331,8 @@ things make a changed file actually show up:
 
 ## Debug readout
 
-Small grey text, shown in the help panel (bottom left, desktop —
-open it with Show/Hide Help or ?) and in the world
-just beyond the status text. Refreshed about 5 times a second. * toggles it.
+Small grey text, shown in the main panel below the scores on desktop,
+and in the world east of the board in MR. Refreshed about 5 times a second. * toggles it.
 The build timestamp is also shown in the HUD and debug readout, using
 `yyyy-MM-dd@HH:mm:ss`. It is computed from the served files'
 Last-Modified headers (see buildTime.js), so it moves whenever a file
@@ -355,9 +358,9 @@ numbers; what you see is the difference between them.
 - `app/index.html` — page, HUD, import map for Three.js, loads `main.js`.
 - `app/main.js` — game flow: board, cube orientation and rolling
   animation, flat icons, level generation, thumbstick/grip input,
-  appearance/menu panels, scores, and the in-world status text (flat
-  in the board plane, just past the near edge toward the player, no
-  background or border), and the sky background. Shared state lives in
+  appearance/menu panels, scores, and the in-world status text (tilted
+  up past the far edge, 2.0 m wide, with a grid-line border in MR),
+  and the sky background. Shared state lives in
   `app/state.js`; constants and colours in `app/config.js`; the cube
   (six separate face planes) in `app/cube.js`.
 - `app/Assets/starmap_2020_{8k,4k}[_raw].jpg` — the sky star maps (adjusted and raw; 8k preferred, 4k fallback).

@@ -22,13 +22,9 @@ export const SESSION_DEFAULTS = {
   },
   // Board home, MR (Quest passthrough)
   boardHome_MR: {
-    position: {
-      x: 0,
-      y: -0.1,
-      z: -1.75
-    },
+    position: { x: 0, y: -0.1, z: -1.75 },
     tilt: 30,
-    scale: 0.75
+    scale: 0.75,
   },
   // Appearance — everything editable from the B-button panel.
   // Colours are hex; opacity 0–1. boardIcons / cubeIcons are
