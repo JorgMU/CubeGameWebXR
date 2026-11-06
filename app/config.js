@@ -1,58 +1,50 @@
 // Configuration constants for Cube Game WebXR
 // Fixed build: 2026-11-04 refactor01-fixed (see ../FIXES.md)
+// v30: the session defaults (board layout, homes, appearance, skybox)
+// moved to app/sessionConfig.js; this file keeps the code constants
+// and derives the values that depend on the session defaults.
+import { SESSION_DEFAULTS } from './sessionConfig.js';
 export const BUILD_LABEL = '2026-11-04 refactor01-fixed2'; // fallback only: the HUD date comes from Last-Modified headers (see buildTime.js)
 // Updated Nov 5, 2026 (v17): desktop home is further away, tilted and larger
 
-// Board and grid
-export const GRID = 11;
-export const BOARD_SIZE = 2.0; // m, board footprint
-export const CELL = BOARD_SIZE / GRID;
+// Board and grid — v30: GRID, BOARD_SIZE and COLORED_FRACTION moved
+// to app/sessionConfig.js (SESSION_DEFAULTS.boardLayout). CELL and CUBE
+// are still derived here from them.
+export const CELL = SESSION_DEFAULTS.boardLayout.boardSize / SESSION_DEFAULTS.boardLayout.grid;
 export const CUBE = CELL;
-export const COLORED_FRACTION = 0.5;
 
-// Cube rolling
-export const ROLL_SECONDS = 0.1;
+// Cube rolling — v30: moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.boardLayout.rollSeconds).
 
-// Starting position
-export const START_COL = Math.floor(GRID / 2);
-export const START_ROW = Math.floor(GRID / 2);
+// Starting position — derived from the session board layout
+// (SESSION_DEFAULTS.boardLayout.grid).
+export const START_COL = Math.floor(SESSION_DEFAULTS.boardLayout.grid / 2);
+export const START_ROW = Math.floor(SESSION_DEFAULTS.boardLayout.grid / 2);
 
-// Colors and shapes
+// Colors and shapes — the six tile identities (name and shape stay
+// fixed here). The fill colours are the session defaults
+// (SESSION_DEFAULTS.appearance), so editing a fill in
+// sessionConfig.js changes the colour everywhere, including the HUD's
+// "face down" chip. v30: the hex/css literals moved there.
+const _ap = SESSION_DEFAULTS.appearance;
 export const COLORS = [
-  { name: 'Red', hex: 0xc10303, css: '#c10303', shape: 'circle' },
-  { name: 'Green', hex: 0x049f27, css: '#049f27', shape: 'triangle' },
-  { name: 'Blue', hex: 0x354cff, css: '#354cff', shape: 'square' },
-  { name: 'Yellow', hex: 0xf1c40f, css: '#f1c40f', shape: 'star' },
-  { name: 'Purple', hex: 0x9b59b6, css: '#9b59b6', shape: 'diamond' },
-  { name: 'Orange', hex: 0xe67e22, css: '#e67e22', shape: 'hexagon' },
+  { name: 'Red', hex: parseInt(_ap.circle.fill.slice(1), 16), css: _ap.circle.fill, shape: 'circle' },
+  { name: 'Green', hex: parseInt(_ap.triangle.fill.slice(1), 16), css: _ap.triangle.fill, shape: 'triangle' },
+  { name: 'Blue', hex: parseInt(_ap.square.fill.slice(1), 16), css: _ap.square.fill, shape: 'square' },
+  { name: 'Yellow', hex: parseInt(_ap.star.fill.slice(1), 16), css: _ap.star.fill, shape: 'star' },
+  { name: 'Purple', hex: parseInt(_ap.diamond.fill.slice(1), 16), css: _ap.diamond.fill, shape: 'diamond' },
+  { name: 'Orange', hex: parseInt(_ap.hexagon.fill.slice(1), 16), css: _ap.hexagon.fill, shape: 'hexagon' },
 ];
 
 export const INITIAL_ORIENTATION = { up: 2, down: 5, north: 1, south: 3, east: 0, west: 4 };
 
-// Board appearance
-export const BOARD_COLOR = '#000584';
-export const BOARD_OPACITY = 0.34;
-export const BOARD_ICON_OPACITY = 0.8; // board shapes (flat icons) — user's choice (Nov 5, 2026)
-export const GRID_COLOR = 0x0c3700; // dark green — user's colour choice (Nov 5, 2026); was black 0x000000
-// Cube faces: one background colour for ALL faces (see rebuildCubeFaces in
-// main.js); the shape on each face is drawn in that shape's own colour, as on
-// the board. The background must therefore not be any of the six shape
-// colours — the old green default (#036500) hid the green triangle, and a
-// per-face background (fixed8) put the colours on the wrong layer. Dark
-// neutral grey lets every shape colour read: red, green, blue, yellow,
-// purple and orange all pop on it.
-export const CUBE_FACE_COLOR = '#222222';
-export const CUBE_OPACITY = 0.4; // user's choice (Nov 5, 2026); was 0.6
-export const CUBE_ICON_OPACITY = 0.9; // cube shapes — user's choice (Nov 5, 2026)
-export const CUBE_EDGE_COLOR = '#055200';
-export const SHAPE_BORDER_COLOR = '#000000';
-export const SHAPE_BORDER_WIDTH = 5; // px on the 256 px icon texture — user's choice (Nov 5, 2026); was 4
+// Board appearance — v30: moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.appearance: board, boardIcons, cube, cubeIcons,
+// grid, edges, shapeBorder).
 
-// World positioning
-export const HOMES = {
-  desktop: { position: { x: 0, y: 0.5, z: -3.0 }, tilt: 20, scale: 3.22 },
-  mr: { position: { x: 0, y: -0.1, z: -1.75 }, tilt: 30, scale: 0.75 },
-};
+// World positioning — v30: moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.boardHome_2D / .boardHome_MR). scene.js and
+// main.js read them from there now.
 
 export const EXIT_MESSAGE_RISE = 0.4; // metres above eye height
 export const ROTATE_GAIN = 0.4;

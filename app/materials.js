@@ -1,7 +1,12 @@
 import * as THREE from 'three';
-import { CUBE_OPACITY, CUBE_ICON_OPACITY, CUBE_EDGE_COLOR, BOARD_COLOR, BOARD_OPACITY, GRID_COLOR } from './config.js';
+// v30: the appearance defaults moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.appearance); the material factories read them
+// from there now instead of from config.js.
+import { SESSION_DEFAULTS } from './sessionConfig.js';
 import { makeIconTexture } from './textures.js';
 import { COLORS } from './config.js';
+
+const ap = SESSION_DEFAULTS.appearance;
 
 // Cube materials. Each face is two planes (see cube.js): a plain-colour
 // background and, just outside it, the shape on its own. That is what
@@ -18,10 +23,10 @@ export function createCubeFaceMaterial() {
   // per-face sorting that makes this work is in cube.js (six separate
   // planes, not one BoxGeometry — see there).
   return new THREE.MeshStandardMaterial({
-    transparent: CUBE_OPACITY < 1,
-    opacity: CUBE_OPACITY,
-    side: CUBE_OPACITY < 1 ? THREE.DoubleSide : THREE.FrontSide,
-    depthWrite: CUBE_OPACITY >= 1,
+    transparent: ap.cube.opacity < 1,
+    opacity: ap.cube.opacity,
+    side: ap.cube.opacity < 1 ? THREE.DoubleSide : THREE.FrontSide,
+    depthWrite: ap.cube.opacity >= 1,
   });
 }
 
@@ -37,8 +42,8 @@ export function createCubeShapeMaterial(colorIndex, iconTextures) {
   return new THREE.MeshStandardMaterial({
     map: iconTextures[colorIndex],
     transparent: true,
-    opacity: CUBE_ICON_OPACITY,
-    side: CUBE_OPACITY < 1 ? THREE.DoubleSide : THREE.FrontSide,
+    opacity: ap.cubeIcons.opacity,
+    side: ap.cube.opacity < 1 ? THREE.DoubleSide : THREE.FrontSide,
     depthWrite: false,
   });
 }
@@ -48,22 +53,22 @@ export function createCubeShapeMaterials(iconTextures, cubeFaceColorIndices) {
 }
 
 export function createCubeEdgeMaterial() {
-  return new THREE.LineBasicMaterial({ color: CUBE_EDGE_COLOR });
+  return new THREE.LineBasicMaterial({ color: ap.edges.color });
 }
 
 // Board materials
 export function createBoardMaterial() {
-  const boardTex = makeIconTexture('square', BOARD_COLOR);
+  const boardTex = makeIconTexture('square', ap.board.color);
   return new THREE.MeshBasicMaterial({
     map: boardTex,
     transparent: true,
-    opacity: BOARD_OPACITY,
+    opacity: ap.board.opacity,
     side: THREE.DoubleSide,
   });
 }
 
 export function createGridMaterial() {
-  return new THREE.LineBasicMaterial({ color: GRID_COLOR });
+  return new THREE.LineBasicMaterial({ color: ap.grid.color });
 }
 
 // Icon materials

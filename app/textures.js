@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { COLORS, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
+import { COLORS } from './config.js';
+// v30: the shape-border defaults moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.appearance.shapeBorder).
+import { SESSION_DEFAULTS } from './sessionConfig.js';
 
 // Shape styles for drawing icons
 export let shapeStyles = {};
@@ -7,7 +10,7 @@ export let shapeStyles = {};
 export function initShapeStyles() {
   shapeStyles = {};
   for (const col of COLORS) {
-    shapeStyles[col.shape] = { fill: col.css, border: SHAPE_BORDER_COLOR, width: SHAPE_BORDER_WIDTH };
+    shapeStyles[col.shape] = { fill: col.css, border: SESSION_DEFAULTS.appearance.shapeBorder.color, width: SESSION_DEFAULTS.appearance.shapeBorder.width };
   }
 }
 

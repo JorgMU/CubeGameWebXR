@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
-import { HOMES } from './config.js';
+// v30: the home poses moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.boardHome_2D / .boardHome_MR).
+import { SESSION_DEFAULTS } from './sessionConfig.js';
 
 let renderer, scene, camera, worldGroup;
 
@@ -61,7 +63,7 @@ export function initScene() {
 
   // World group (everything that moves together)
   worldGroup = new THREE.Group();
-  const desktopHome = HOMES.desktop;
+  const desktopHome = SESSION_DEFAULTS.boardHome_2D;
   worldGroup.position.set(desktopHome.position.x, desktopHome.position.y, desktopHome.position.z);
   worldGroup.scale.setScalar(desktopHome.scale);
   scene.add(worldGroup);

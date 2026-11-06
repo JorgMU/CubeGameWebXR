@@ -1,6 +1,11 @@
 // Centralized game state manager
 // This module manages all game state and provides accessor functions for consistent state management.
-import { INITIAL_ORIENTATION, START_COL, START_ROW, SESSION_RECORDS_MAX, RECORDS_STORAGE_KEY } from './config.js';
+import { INITIAL_ORIENTATION, START_COL, START_ROW, SESSION_RECORDS_MAX, RECORDS_STORAGE_KEY, SKY_MODES } from './config.js';
+// v30: the default sky mode moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.skybox.mode, a name); fall back to Adjusted (0)
+// if the file ever names a mode that does not exist.
+import { SESSION_DEFAULTS } from './sessionConfig.js';
+const DEFAULT_SKY_MODE = Math.max(0, SKY_MODES.indexOf(SESSION_DEFAULTS.skybox.mode));
 
 export const gameState = {
   // Level and progression
@@ -42,7 +47,7 @@ export const gameState = {
   tiltTimer: 0,
   
   // Sky
-  skyMode: 0,
+  skyMode: DEFAULT_SKY_MODE,
   skyRequest: 0,
   
   // Input state

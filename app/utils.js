@@ -1,9 +1,12 @@
 import * as THREE from 'three';
-import { GRID, CELL } from './config.js';
+import { CELL } from './config.js';
+// v30: GRID moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.boardLayout.grid).
+import { SESSION_DEFAULTS } from './sessionConfig.js';
 
 // Math utilities
 export function cellToLocal(col, row) {
-  const centre = (GRID - 1) / 2;
+  const centre = (SESSION_DEFAULTS.boardLayout.grid - 1) / 2;
   return new THREE.Vector3((col - centre) * CELL, 0, (row - centre) * CELL);
 }
 

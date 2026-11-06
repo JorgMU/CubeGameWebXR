@@ -8,7 +8,12 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 // Import build timestamp (calculated dynamically from file modification dates)
 
 // Import configuration
-import { GRID, BOARD_SIZE, CELL, CUBE, COLORED_FRACTION, ROLL_SECONDS, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, HOMES, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS, BOARD_COLOR, BOARD_OPACITY, BOARD_ICON_OPACITY, CUBE_FACE_COLOR, CUBE_ICON_OPACITY, CUBE_OPACITY, CUBE_EDGE_COLOR, GRID_COLOR, SHAPE_BORDER_COLOR, SHAPE_BORDER_WIDTH } from './config.js';
+import { CELL, CUBE, START_COL, START_ROW, COLORS, INITIAL_ORIENTATION, EXIT_MESSAGE_RISE, ROTATE_GAIN, SCALE_GAIN, TILT_STEP, TILT_MAX, TILT_REPEAT_SECONDS, SKY_RADIUS, SKY_MODES, SKY_MESSAGES, MESSAGE_SECONDS, DEBUG_SECONDS, AP_W, AP_H, AP_SELECT, AP_PARTS, AP_PICKER, AP_BRIGHT, AP_OPACITY, AP_STORAGE_KEY, AP_PANEL_WIDTH, BORDER_WIDTH_MAX, APPEARANCE_REBUILD_MS } from './config.js';
+// v30: the session defaults (board layout, homes, appearance, skybox)
+// moved to app/sessionConfig.js; GRID, BOARD_SIZE, COLORED_FRACTION,
+// ROLL_SECONDS, HOMES and the appearance colours used to be imported
+// from config.js and are now read from SESSION_DEFAULTS.
+import { SESSION_DEFAULTS } from './sessionConfig.js';
 
 // Import utilities
 import { cellToLocal, keyOf, hsvCss, cssToHsv, apClamp01, formatTime, triggerHaptic, setHapticGamepad } from './utils.js';
@@ -82,6 +87,13 @@ import { initCube, getCube, getCubeMaterials, getCubeShapeMaterials, getCubeFace
 // mouse wheel scales the world like +/-.
 // ---------------------------------------------------------------------------
 
+// v30: short local names for the session defaults main.js uses all
+// over. The values themselves are only defined in sessionConfig.js.
+const BOARD_LAYOUT = SESSION_DEFAULTS.boardLayout;
+const HOME_2D = SESSION_DEFAULTS.boardHome_2D;
+const HOME_MR = SESSION_DEFAULTS.boardHome_MR;
+const defAppearance = SESSION_DEFAULTS.appearance;
+
 // Initialize Three.js scene, camera, renderer
 initScene();
 
@@ -91,10 +103,10 @@ const camera = getCamera();
 const worldGroup = getWorldGroup();
 
 // Ensure desktop scale is set correctly at startup
-worldGroup.scale.setScalar(HOMES.desktop.scale);
+worldGroup.scale.setScalar(HOME_2D.scale);
 
 function currentHome() {
-  return xrGetSession() ? HOMES.mr : HOMES.desktop;
+  return xrGetSession() ? HOME_MR : HOME_2D;
 }
 
 // Board and tilt
@@ -180,15 +192,19 @@ loadSky();
 
 // Transparent board: faint plane + grid lines.
 const boardPlane = new THREE.Mesh(
-  new THREE.PlaneGeometry(BOARD_SIZE, BOARD_SIZE),
-  new THREE.MeshBasicMaterial({ color: BOARD_COLOR, transparent: true, opacity: BOARD_OPACITY, depthWrite: false, side: THREE.DoubleSide })
+  new THREE.PlaneGeometry(BOARD_LAYOUT.boardSize, BOARD_LAYOUT.boardSize),
+  new THREE.MeshBasicMaterial({ color: defAppearance.board.color, transparent: true, opacity: defAppearance.board.opacity, depthWrite: false, side: THREE.DoubleSide })
 );
 boardPlane.renderOrder = -0.5; // after the sky, before the icons, so it darkens only what is behind the board
 boardPlane.rotation.x = -Math.PI / 2;
 boardPlane.position.y = 0.001;
 worldGroup.add(boardPlane);
 
-const grid = new THREE.GridHelper(BOARD_SIZE, GRID, GRID_COLOR, GRID_COLOR);
+// v30: the grid colour comes from the session defaults now (it used
+// to be GRID_COLOR from config.js); applyLineColors() still rewrites
+// the baked vertex colours at startup, so this is the initial colour.
+const gridColorHex = parseInt(defAppearance.grid.color.slice(1), 16);
+const grid = new THREE.GridHelper(BOARD_LAYOUT.boardSize, BOARD_LAYOUT.grid, gridColorHex, gridColorHex);
 grid.position.y = 0.005;
 worldGroup.add(grid);
 
@@ -200,7 +216,7 @@ const cubeIconTextures = createCubeIconTextures();
 // Initialize cube
 initCube(cubeIconTextures);
 const cube = getCube();
-const cubeEdgeMaterial = new THREE.LineBasicMaterial({ color: CUBE_EDGE_COLOR });
+const cubeEdgeMaterial = new THREE.LineBasicMaterial({ color: defAppearance.edges.color });
 cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE, CUBE, CUBE)), cubeEdgeMaterial));
 worldGroup.add(cube);
 
@@ -217,7 +233,7 @@ const panel = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ map: panelTexture, transparent: true, side: THREE.DoubleSide })
 );
 panel.rotation.x = -Math.PI / 3;
-panel.position.set(0, 0.1, -BOARD_SIZE / 2 - 0.35);
+panel.position.set(0, 0.1, -BOARD_LAYOUT.boardSize / 2 - 0.35);
 worldGroup.add(panel);
 
 // --- Debug readout (small grey text) -------------------------------------------
@@ -240,7 +256,7 @@ debugPanel.rotation.x = -Math.PI / 2;
 // the same way from the south as it did on the south edge — it is just
 // no longer in front of the player, below the board. Was:
 // position.set(0, 0.012, BOARD_SIZE / 2 + debugPanelHeight / 2 + 0.05)
-debugPanel.position.set(BOARD_SIZE / 2 + 1.8 / 2 + 0.05, 0.012, 0);
+debugPanel.position.set(BOARD_LAYOUT.boardSize / 2 + 1.8 / 2 + 0.05, 0.012, 0);
 worldGroup.add(debugPanel);
 
 // --- Session scores (flat in the board plane, left of the board) ---------------
@@ -259,7 +275,7 @@ const scoresPanel = new THREE.Mesh(
 );
 scoresPanel.rotation.x = -Math.PI / 2;
 // Top edge level with the board's far edge, with a small gap on the left.
-scoresPanel.position.set(-BOARD_SIZE / 2 - SCORES_W / 2 - 0.05, 0.012, -BOARD_SIZE / 2 + SCORES_H / 2);
+scoresPanel.position.set(-BOARD_LAYOUT.boardSize / 2 - SCORES_W / 2 - 0.05, 0.012, -BOARD_LAYOUT.boardSize / 2 + SCORES_H / 2);
 worldGroup.add(scoresPanel);
 
 function drawScoresPanel(records) {
@@ -367,18 +383,18 @@ function nextLevel() {
 
 function generateLevel() {
   const pattern = [];
-  for (let col = 0; col < GRID; col++) {
-    for (let row = 0; row < GRID; row++) {
+  for (let col = 0; col < BOARD_LAYOUT.grid; col++) {
+    for (let row = 0; row < BOARD_LAYOUT.grid; row++) {
       if (col === START_COL && row === START_ROW) continue; // start square stays blank
-      if (Math.random() < COLORED_FRACTION) {
+      if (Math.random() < BOARD_LAYOUT.coloredFraction) {
         pattern.push({ col, row, colorIndex: Math.floor(Math.random() * COLORS.length) });
       }
     }
   }
   // Guarantee a meaningful level even on an unlucky roll.
   while (pattern.length < 6) {
-    const col = Math.floor(Math.random() * GRID);
-    const row = Math.floor(Math.random() * GRID);
+    const col = Math.floor(Math.random() * BOARD_LAYOUT.grid);
+    const row = Math.floor(Math.random() * BOARD_LAYOUT.grid);
     if (col === START_COL && row === START_ROW) continue;
     if (pattern.some((c) => c.col === col && c.row === row)) continue;
     pattern.push({ col, row, colorIndex: Math.floor(Math.random() * COLORS.length) });
@@ -503,7 +519,7 @@ function tryRoll(dir) {
   const pos = getCubePosition();
   const destCol = pos.col + dCol;
   const destRow = pos.row + dRow;
-  if (destCol < 0 || destCol >= GRID || destRow < 0 || destRow >= GRID) {
+  if (destCol < 0 || destCol >= BOARD_LAYOUT.grid || destRow < 0 || destRow >= BOARD_LAYOUT.grid) {
     setMessage('Edge — can\'t roll that way.');
     updateHUD();
     return;
@@ -620,9 +636,9 @@ function startCelebration() {
   const tint = new THREE.Color();
   for (let i = 0; i < CONFETTI_COUNT; i++) {
     const o = i * 3;
-    confettiPositions[o] = (Math.random() - 0.5) * BOARD_SIZE;
+    confettiPositions[o] = (Math.random() - 0.5) * BOARD_LAYOUT.boardSize;
     confettiPositions[o + 1] = 0.02;
-    confettiPositions[o + 2] = (Math.random() - 0.5) * BOARD_SIZE;
+    confettiPositions[o + 2] = (Math.random() - 0.5) * BOARD_LAYOUT.boardSize;
     confettiVelocities[o] = (Math.random() - 0.5) * 0.15;
     confettiVelocities[o + 1] = 0.25 + Math.random() * 0.45;
     confettiVelocities[o + 2] = (Math.random() - 0.5) * 0.15;
@@ -746,10 +762,10 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'k') toggleSky();
   else if (k === '0') {
     if (renderer.xr.isPresenting) { resetWorldForMR(); return; }
-    worldGroup.position.copy(HOMES.desktop.position);
-    worldGroup.quaternion.copy(homeQuat(HOMES.desktop));
-    setTiltDeg(HOMES.desktop.tilt);
-    worldGroup.scale.setScalar(HOMES.desktop.scale);
+    worldGroup.position.copy(HOME_2D.position);
+    worldGroup.quaternion.copy(homeQuat(HOME_2D));
+    setTiltDeg(HOME_2D.tilt);
+    worldGroup.scale.setScalar(HOME_2D.scale);
   }
 });
 // Mouse wheel scales the world, exactly like +/- on the keyboard:
@@ -803,14 +819,14 @@ function toJS(value, level) {
 function buildSessionConfigScript() {
   const ap = getAppearance();
   const hex = (e) => hsvCss(e.h, e.s, e.v);
-  const d = HOMES.desktop, m = HOMES.mr;
+  const d = SESSION_DEFAULTS.boardHome_2D, m = SESSION_DEFAULTS.boardHome_MR;
   const orientation = getOrientation();
   const settings = {
     boardLayout: {
-      grid: GRID,
-      boardSize: BOARD_SIZE,
-      coloredFraction: COLORED_FRACTION,
-      rollSeconds: ROLL_SECONDS,
+      grid: BOARD_LAYOUT.grid,
+      boardSize: BOARD_LAYOUT.boardSize,
+      coloredFraction: BOARD_LAYOUT.coloredFraction,
+      rollSeconds: BOARD_LAYOUT.rollSeconds,
     },
     boardHome_2D: {
       position: { x: d.position.x, y: d.position.y, z: d.position.z },
@@ -834,8 +850,6 @@ function buildSessionConfigScript() {
     },
     skybox: {
       mode: SKY_MODES[getSkyMode()],
-      modes: SKY_MODES,
-      passthroughAvailable: passthroughAvailable(),
     },
   };
   const lines = [];
@@ -927,7 +941,7 @@ const gripHeld = getGripHeld(); // state.js array, single source of truth
   controller.addEventListener('squeezestart', () => { gripHeld[i] = true; });
   controller.addEventListener('squeezeend', () => { gripHeld[i] = false; });
 });
-// Immersive start: centred on the board, tilted, slightly smaller board (see HOMES).
+// Immersive start: centred on the board, tilted, slightly smaller board (see boardHome_2D / boardHome_MR in sessionConfig.js).
 const homeQuat = (home) => new THREE.Quaternion().setFromAxisAngle(TILT_AXIS, home.tilt * Math.PI / 180);
 function resetWorldForMR() {
   const home = currentHome();
@@ -938,12 +952,12 @@ function resetWorldForMR() {
 }
 // 2D start: apply the desktop home pose. initScene() sets the position
 // and scale, but not the tilt — without this the board would start flat
-// even though HOMES.desktop.tilt is 20, and the first T press would
+// even though the desktop home tilt is 20, and the first T press would
 // jump from 0. MR is unaffected: sessionstart calls resetWorldForMR()
 // with the MR home.
 if (!renderer.xr.isPresenting) {
-  worldGroup.quaternion.copy(homeQuat(HOMES.desktop));
-  setTiltDeg(HOMES.desktop.tilt);
+  worldGroup.quaternion.copy(homeQuat(HOME_2D));
+  setTiltDeg(HOME_2D.tilt);
 }
 renderer.xr.addEventListener('sessionstart', () => {
   unlockAudio();
@@ -1175,18 +1189,22 @@ const AP_ITEMS = [
   })),
 ];
 
+// v30: the default values moved to app/sessionConfig.js
+// (SESSION_DEFAULTS.appearance); this only converts them from hex to
+// the HSV the panel works in, then merges the saved appearance over
+// them, as before.
 const appearance = {
-  board: { ...cssToHsv(BOARD_COLOR), a: BOARD_OPACITY },
-  boardIcons: { h: 0, s: 0, v: 1, a: BOARD_ICON_OPACITY },
-  cube: { ...cssToHsv(CUBE_FACE_COLOR), a: CUBE_OPACITY },
-  cubeIcons: { h: 0, s: 0, v: 1, a: CUBE_ICON_OPACITY },
-  grid: { ...cssToHsv(`#${GRID_COLOR.toString(16).padStart(6, '0')}`), a: 1 },
-  edges: { ...cssToHsv(CUBE_EDGE_COLOR), a: 1 },
+  board: { ...cssToHsv(defAppearance.board.color), a: defAppearance.board.opacity },
+  boardIcons: { h: 0, s: 0, v: 1, a: defAppearance.boardIcons.opacity },
+  cube: { ...cssToHsv(defAppearance.cube.color), a: defAppearance.cube.opacity },
+  cubeIcons: { h: 0, s: 0, v: 1, a: defAppearance.cubeIcons.opacity },
+  grid: { ...cssToHsv(defAppearance.grid.color), a: 1 },
+  edges: { ...cssToHsv(defAppearance.edges.color), a: 1 },
 };
 for (const col of COLORS) {
-  appearance[`${col.shape}.fill`] = { ...cssToHsv(col.css), a: 1 };
+  appearance[`${col.shape}.fill`] = { ...cssToHsv(defAppearance[col.shape].fill), a: 1 };
 }
-appearance.shapeBorder = { ...cssToHsv(SHAPE_BORDER_COLOR), a: 1, w: SHAPE_BORDER_WIDTH };
+appearance.shapeBorder = { ...cssToHsv(defAppearance.shapeBorder.color), a: 1, w: defAppearance.shapeBorder.width };
 try {
   const saved = JSON.parse(localStorage.getItem(AP_STORAGE_KEY));
   const isOldCubeDefault = saved && saved.cube && (
@@ -1198,7 +1216,7 @@ try {
     // Both were defaults for the wrong layer: green hid the green triangle
     // as a background, white as a background would hide the yellow star.
     // Reset to the new dark-grey default, keeping opacity.
-    saved.cube = { ...cssToHsv(CUBE_FACE_COLOR), a: saved.cube.a };
+    saved.cube = { ...cssToHsv(defAppearance.cube.color), a: saved.cube.a };
   }
   for (const key of Object.keys(appearance)) {
     if (saved && saved[key] && ['h', 's', 'v', 'a'].every((k) => Number.isFinite(saved[key][k]))) {
@@ -1211,7 +1229,7 @@ try {
   // when a save exists: a fresh load (no save) must keep the config
   // default instead.
   if (saved && !saved.cubeIcons) appearance.cubeIcons.a = appearance.cube.a;
-  if (!Number.isFinite(appearance.shapeBorder.w)) appearance.shapeBorder.w = SHAPE_BORDER_WIDTH;
+  if (!Number.isFinite(appearance.shapeBorder.w)) appearance.shapeBorder.w = defAppearance.shapeBorder.width;
 } catch { /* ignore bad or unavailable storage */ }
 setAppearance(appearance);
 
@@ -1705,7 +1723,7 @@ renderer.setAnimationLoop(() => {
   const roll = getRoll();
   if (roll) {
     const newT = roll.t + dt;
-    const pRaw = Math.min(newT / ROLL_SECONDS, 1);
+    const pRaw = Math.min(newT / BOARD_LAYOUT.rollSeconds, 1);
     const p = pRaw * pRaw * (3 - 2 * pRaw);
     const angle = roll.totalAngle * p;
     const q = new THREE.Quaternion().setFromAxisAngle(roll.axis, angle);

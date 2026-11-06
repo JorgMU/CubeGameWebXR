@@ -10,6 +10,7 @@ const FILES_TO_CHECK = [
   './index.html',
   './main.js',
   './config.js',
+  './sessionConfig.js',
   './state.js',
   './cube.js',
   './materials.js',

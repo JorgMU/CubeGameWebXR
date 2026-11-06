@@ -111,7 +111,7 @@
     Quest: thumbstick rolls one square. Hold <b>one grip</b> to drag the world, or <b>both grips</b> to also rotate and scale:
     twist hands to rotate (yaw), move hands apart/together to scale. Press <b>B button</b> (right hand) to open the color picker.<br />
     Desktop: arrow keys / WASD roll, Ctrl+Arrow move world, Q/E rotate world,
-    +/-/wheel scale world, 0 reset world, N next, R restart, P toggle debug info, T tilt board up, Shift+T tilt down, H hide/show this panel (the buttons at the top right stay visible), C clear scores. Copy settings copies the board, appearance and skybox settings to the clipboard as JSONC.<br />
+    +/-/wheel scale world, 0 reset world, N next, R restart, P toggle debug info, T tilt board up, Shift+T tilt down, H hide/show this panel (the buttons at the top right stay visible), C clear scores. Copy settings copies the session defaults to the clipboard as ECMAScript, ready to paste into app/sessionConfig.js.<br />
     The clock starts on your first move. Each match is worth 180 points minus one point per elapsed second (minimum 0). The top 10 completed levels are kept across sessions (saved in your browser, like the colours), and shown in the table above and on the scores panel beside the board. C, or the Clear scores button, wipes them.<br />
     In MR after a win, pull a trigger to start the next level.
   </div>
@@ -138,9 +138,10 @@
   //  1. Its fetches used the browser's default cache, so the Last-Modified
   //     it read could be the cached copy's — it never saw the change, so
   //     it never reloaded, and it loaded main.js?v=<old timestamp>.
-  //  2. Only main.js was cache-busted. Its 8 imports (config.js, state.js,
-  //     cube.js, ...) are loaded by the module loader with no query string,
-  //     so they could still come from cache even when main.js was fresh.
+  //  2. Only main.js was cache-busted. Its imports (config.js,
+  //     sessionConfig.js, state.js, cube.js, ...) are loaded by the
+  //     module loader with no query string, so they could still come
+  //     from cache even when main.js was fresh.
   //  3. When it did see a change it did location.reload() and returned
   //     without loading anything. On the reload the fetches could again
   //     come back cached (old), which wrote the old timestamp back into
@@ -151,7 +152,7 @@
   // location.reload() at all. And ?fresh=<anything> in the URL (or the
   // Force refresh button) loads main.js with a unique, never-cached
   // version string, for when you want to force it by hand.
-  const FILES_TO_CHECK = ['./index.html', './main.js', './config.js', './state.js', './cube.js', './materials.js', './scene.js', './textures.js', './utils.js'];
+  const FILES_TO_CHECK = ['./index.html', './main.js', './config.js', './sessionConfig.js', './state.js', './cube.js', './materials.js', './scene.js', './textures.js', './utils.js'];
   async function calculateBuildTimestamp() {
     const timestamps = [];
     for (const file of FILES_TO_CHECK) {

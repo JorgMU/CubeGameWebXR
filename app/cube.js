@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CUBE, INITIAL_ORIENTATION, CUBE_OPACITY } from './config.js';
+import { CUBE, INITIAL_ORIENTATION } from './config.js';
 import { cellToLocal } from './utils.js';
 import { createCubeMaterials, createCubeShapeMaterials, createCubeEdgeMaterial } from './materials.js';
 
