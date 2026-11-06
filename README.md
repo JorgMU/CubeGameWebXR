@@ -9,13 +9,13 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
   (`GRID_COLOR` `0x000000`), so it tints the background behind it. The board footprint is still 2 m, so each cell is
   about 0.182 m — to change the board size, change `BOARD_SIZE` in `app/config.js`,
   not `CELL`, and the cells, cube, and icons will scale with it.
-- A cube has dark-grey faces (`CUBE_FACE_COLOR` `#222222`) at 60% opacity
+- A cube has dark-grey faces (`CUBE_FACE_COLOR` `#222222`) at 40% opacity
   (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
   shape and colour as the board icons). Current colours, from the appearance
-  panel's colour table: board `#000584`, cube `#222222`, grid `#000000`,
+  panel's colour table: board `#000584`, cube `#222222`, grid `#0c3700`,
   edges `#055200`, circle `#c10303`, triangle `#049f27`, square `#354cff`,
   star `#f1c40f`, diamond `#9b59b6`, hexagon `#e67e22`, shape border
-  `#000000` 4 px. Red, Green, Blue, Yellow, Purple, Orange.
+  `#000000` 5 px. Red, Green, Blue, Yellow, Purple, Orange.
 - The cube is transparent, and its six faces are separate planes, so the
   shapes on the far faces show through the near faces, in the right order,
   at partial opacity. At opacity 1.0 it is solid, and only three faces show.
@@ -42,7 +42,7 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
   under `cubeGameAppearance`), sorted by score, then by time, and
   trimmed to 10. Bad or unavailable storage falls back to an empty list.
 - **Clear scores** (2D only): the **Clear scores (C)** button in the
-  top-left HUD, or the **C** key, wipes the saved top 10 immediately
+  top-right button bar, or the **C** key, wipes the saved top 10 immediately
   (no undo) and restores the empty table. There is no clear control in
   MR; clear from the 2D panel before or after a session.
 
@@ -87,14 +87,20 @@ and Purple west.
   and Y as 5; the debug readout's "Left buttons down" line shows the indices.)
 - **Right B button**: opens/closes the appearance panel on the right controller. Point the left controller at
   it and hold the left trigger to drag. The `<` / `>` buttons, or the **right thumbstick left/right**, step
-  through the items in order (Board, Cube faces, Grid lines, Cube edges, Shape borders, then each shape's
-  Fill: Circle, Triangle, Square, Star, Diamond, Hexagon); the stick wraps around and also walks between an
-  item's parts when it has more than one. "Shape borders" is a single colour and width shared by every
-  shape. The colour picker (hue across, saturation down) and Brightness slider update live; Opacity
-  appears for the board and cube faces; Shape borders gets a Border width slider (0-30 px on the icon
-  texture). Grid lines stay 1 px (WebGL limit). Values are saved in `localStorage`.
+  through the items in order (Board, Board icons, Cube faces, Cube icons, Grid lines, Cube edges,
+  Shape borders, then each shape's Fill: Circle, Triangle, Square, Star, Diamond, Hexagon); the stick
+  wraps around and also walks between an item's parts when it has more than one. "Shape borders" is a
+  single colour and width shared by every shape. The colour picker (hue across, saturation down) and
+  Brightness slider update live; Opacity appears for the board, board icons, cube faces and cube icons.
+  "Board icons" and "Cube icons" have only the Opacity slider — their colours come from the shape fills.
+  The cube faces and their shapes have separate opacities: each shape sits on its own plane just outside
+  its face, so the face can stay translucent while the shapes stay solid, or the other way round. Try the
+  board icons near 40% to match the cube faces at their default. Shape borders gets a Border
+  width slider (0-30 px on the icon texture). Grid lines stay 1 px (WebGL limit). Values are saved in
+  `localStorage`.
   The stick and trigger are captured while it is open. The 2D HUD shows a selectable table of every current
-  colour (hex) and the board/cube opacity, hidden with the debug readout, so you can copy values as defaults.
+  colour (hex) and the board, board-icon and cube opacity, hidden with the debug readout, so you can copy
+  values as defaults.
 
 ### Desktop (for testing logic without a headset)
 - Arrow keys / WASD: roll.
@@ -106,7 +112,7 @@ and Purple west.
   of `app/main.js`; the MR one is used by the Quest "Reset view" menu item and
   when a session starts.
 - P: show/hide the debug readout (small grey text; see "Debug readout" below).
-  The **Debug (P)** button in the top-left HUD does the same, and also
+  The **Debug (P)** button in the top-right button bar does the same, and also
   refreshes the colour table at once, for use on the Quest where there
   is no P key.
 - K: cycle the sky: adjusted, raw, off (black).
@@ -117,10 +123,18 @@ and Purple west.
   focused control, so it is left free for that — Enter and Space both
   activate a focused button.)
 - C: clear the saved top-10 scores (no undo). The **Clear scores (C)**
-  button in the top-left HUD does the same.
+  button in the top-right button bar does the same.
+- Copy settings (2D only): the **Copy settings** button in the top-right
+  bar copies the current settings to the clipboard as one JSONC object with
+  five sections — `boardLayout` (the board geometry shared by both modes),
+  `boardHome_2D` (desktop home pose), `boardHome_MR` (Quest home pose),
+  `appearance` (everything the B-button panel edits, colours as hex), and
+  `skybox` (current mode, the four modes, whether passthrough is available).
+  If the clipboard write fails, the text is shown in a box with its own Copy
+  button instead.
 - N: next level. R: restart the current level (same pattern, icons restored).
-- The HTML buttons in the top-left do Next level / Restart level,
-  Debug, and Clear scores.
+- The buttons in the top-right bar do Next level / Restart level,
+  Debug, Copy settings, Clear scores and Force refresh.
 
 ## Repo layout — what is served, and what is not
 

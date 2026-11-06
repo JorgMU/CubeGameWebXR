@@ -767,7 +767,7 @@ document.getElementById('btnForceRefresh').addEventListener('click', () => { con
 
 // --- Copy settings (2D only) ------------------------------------------------
 // A 2D HUD button that copies the current settings as one JSONC object:
-// gameboard2D, gameboardMR, appearance, skybox. Colours are hex, as in
+// boardLayout, boardHome_2D, boardHome_MR, appearance, skybox. Colours are hex, as in
 // config.js, so the dump pastes straight into a settings file. In 2D the
 // page is focused and the click is a user gesture, so
 // navigator.clipboard.writeText() works there — inside an immersive
@@ -793,16 +793,18 @@ function buildSettingsDump() {
   // lines are stripped, and it is the shape a config.jsonc file would use.
   const ind = (v, n) => JSON.stringify(v, null, 2).split('\n').join('\n' + ' '.repeat(n));
   const settings = {
-    gameboard2D: {
-      position: { x: d.position.x, y: d.position.y, z: d.position.z },
-      tilt: d.tilt,
-      scale: d.scale,
+    boardLayout: {
       grid: GRID,
       boardSize: BOARD_SIZE,
       coloredFraction: COLORED_FRACTION,
       rollSeconds: ROLL_SECONDS,
     },
-    gameboardMR: {
+    boardHome_2D: {
+      position: { x: d.position.x, y: d.position.y, z: d.position.z },
+      tilt: d.tilt,
+      scale: d.scale,
+    },
+    boardHome_MR: {
       position: { x: m.position.x, y: m.position.y, z: m.position.z },
       tilt: m.tilt,
       scale: m.scale,
@@ -830,10 +832,12 @@ function buildSettingsDump() {
   lines.push('// app/config.jsonc to make them the defaults — but note the saved');
   lines.push('// appearance in this browser still wins until it is cleared.');
   lines.push('{');
-  lines.push('  // 2D gameboard (desktop browser) home pose; board geometry is shared by 2D and MR');
-  lines.push('  "gameboard2D": ' + ind(settings.gameboard2D, 2) + ',');
-  lines.push('  // MR gameboard (Quest passthrough) home pose');
-  lines.push('  "gameboardMR": ' + ind(settings.gameboardMR, 2) + ',');
+  lines.push('  // Board layout — geometry shared by 2D and MR');
+  lines.push('  "boardLayout": ' + ind(settings.boardLayout, 2) + ',');
+  lines.push('  // Board home, 2D (desktop browser)');
+  lines.push('  "boardHome_2D": ' + ind(settings.boardHome_2D, 2) + ',');
+  lines.push('  // Board home, MR (Quest passthrough)');
+  lines.push('  "boardHome_MR": ' + ind(settings.boardHome_MR, 2) + ',');
   lines.push('  // Appearance — everything editable from the B-button panel. Colours are hex, opacity 0–1.');
   lines.push('  // boardIcons / cubeIcons are opacity-only: their shapes take their colour from the Fill items.');
   lines.push('  "appearance": ' + ind(settings.appearance, 2) + ',');
