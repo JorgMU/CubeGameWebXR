@@ -39,6 +39,26 @@
     text-shadow: 0 0 6px rgba(0,255,102,0.9);
     box-shadow: 0 0 8px rgba(0,255,102,0.7), 0 0 18px rgba(0,255,102,0.35);
   }
+  /* Copy-debug overlay: a dark box with the dump in a textbox, shown only
+     when the clipboard write fails (same idea as the iframe + textbox +
+     copy button pattern). Hidden otherwise. */
+  #copyOverlay { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; }
+  #copyOverlay.open { display: flex; }
+  #copyOverlayBox { background: #101018; border: 1px solid #00ff66; border-radius: 10px; padding: 14px; max-width: 92vw; }
+  #copyOverlayTitle { font-size: 15px; margin-bottom: 8px; }
+  #copyText { width: min(720px, 86vw); height: min(56vh, 480px); background: #000; color: #c8c8c8; border: 1px solid rgba(255,255,255,0.25); border-radius: 6px; font: 12px Consolas, monospace; padding: 8px; }
+  #copyOverlayRow { margin-top: 10px; display: flex; gap: 8px; }
+  #copyOverlay button {
+    padding: 8px 6px; border: 1px solid #007a33; border-radius: 4px;
+    background: rgba(0,0,0,0.35); color: #007a33; cursor: pointer;
+    font: normal 13px sans-serif; text-align: center; outline: none;
+  }
+  #copyOverlay button:hover {
+    border-color: #00ff66; color: #00ff66;
+    text-shadow: 0 0 6px rgba(0,255,102,0.9);
+    box-shadow: 0 0 8px rgba(0,255,102,0.7), 0 0 18px rgba(0,255,102,0.35);
+  }
+  #copyOverlayHint { font-size: 12px; opacity: 0.75; margin-top: 8px; }
   /* The MR button's hover glow. Three.js owns its opacity fade and
      its base colours are set inline in scene.js, so the hover
      colours need !important to win over them. Three.js also raises
@@ -65,6 +85,7 @@
   <button id="btnNext">Next level (N)</button>
   <button id="btnRestart">Restart level (R)</button>
   <button id="btnDebug">Debug (P)</button>
+  <button id="btnCopyDebug">Copy debug</button>
   <button id="btnClearScores">Clear scores (C)</button>
   <button id="btnForceRefresh">Force refresh</button>
 </div>
@@ -87,9 +108,20 @@
     Quest: thumbstick rolls one square. Hold <b>one grip</b> to drag the world, or <b>both grips</b> to also rotate and scale:
     twist hands to rotate (yaw), move hands apart/together to scale. Press <b>B button</b> (right hand) to open the color picker.<br />
     Desktop: arrow keys / WASD roll, Ctrl+Arrow move world, Q/E rotate world,
-    +/-/wheel scale world, 0 reset world, N next, R restart, P toggle debug info, T tilt board up, Shift+T tilt down, H hide/show this panel (the buttons at the top right stay visible), C clear scores.<br />
+    +/-/wheel scale world, 0 reset world, N next, R restart, P toggle debug info, T tilt board up, Shift+T tilt down, H hide/show this panel (the buttons at the top right stay visible), C clear scores. Copy debug copies the debug readout, colour table and settings to the clipboard.<br />
     The clock starts on your first move. Each match is worth 180 points minus one point per elapsed second (minimum 0). The top 10 completed levels are kept across sessions (saved in your browser, like the colours), and shown in the table above and on the scores panel beside the board. C, or the Clear scores button, wipes them.<br />
     In MR after a win, pull a trigger to start the next level.
+  </div>
+</div>
+<div id="copyOverlay">
+  <div id="copyOverlayBox">
+    <div id="copyOverlayTitle">Debug info — copy it from here</div>
+    <textarea id="copyText" readonly spellcheck="false"></textarea>
+    <div id="copyOverlayRow">
+      <button id="btnCopyText">Copy</button>
+      <button id="btnCopyClose">Close</button>
+    </div>
+    <div id="copyOverlayHint">If Copy reports a failure, select all (Ctrl+A) and copy (Ctrl+C) by hand.</div>
   </div>
 </div>
 <canvas id="renderCanvas"></canvas>

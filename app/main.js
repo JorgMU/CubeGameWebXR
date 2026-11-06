@@ -765,6 +765,94 @@ document.getElementById('btnDebug').addEventListener('click', () => { setDebugVi
 document.getElementById('btnClearScores').addEventListener('click', clearScores);
 document.getElementById('btnForceRefresh').addEventListener('click', () => { const url = new URL(location.href); url.searchParams.set('fresh', String(Date.now())); location.href = url.toString(); });
 
+// --- Copy debug dump (2D only) ------------------------------------------------
+// A 2D HUD button that copies everything worth knowing into the clipboard:
+// the debug readout, the colour table, every appearance value, the home
+// poses and the session records. In 2D the page is focused and the click
+// is a user gesture, so navigator.clipboard.writeText() works there —
+// inside an immersive session it does not reliably (no page focus, and a
+// controller trigger is not the gesture the browser wants), which is why
+// this button lives in the 2D HUD only and there is no in-headset copy.
+// If the clipboard write fails (or the API is unavailable), the dump is
+// shown in a textbox instead — the pattern other pages use with an
+// iframe + textbox + copy button, done here as a plain overlay because
+// no iframe is needed on the same page — with its own Copy button
+// (clipboard API, then the old textarea/execCommand fallback) and Close.
+const copyOverlay = document.getElementById('copyOverlay');
+const copyText = document.getElementById('copyText');
+
+function buildDebugDump() {
+  updateColorTable();
+  const orientation = getOrientation();
+  const lines = [];
+  lines.push(`CubeGameWebXR debug dump — ${new Date().toISOString()}`);
+  lines.push(`Build: ${BUILD_TIMESTAMP}`);
+  lines.push('');
+  lines.push('--- Game ---');
+  lines.push(`Level: ${getLevel()}  Remaining: ${getRemaining()}  Score: ${getLevelScore()}  Time: ${getLevelStartedAt() === null ? 'Ready' : formatTime(elapsedLevelSeconds())}  Face down: ${COLORS[orientation.down].name}`);
+  lines.push('');
+  lines.push('--- Debug ---');
+  lines.push(debugLines().join('\n'));
+  lines.push('');
+  lines.push('--- Colours ---');
+  lines.push(hudColors.textContent.trim());
+  lines.push('');
+  lines.push('--- Appearance (all user-editable values) ---');
+  lines.push(JSON.stringify(getAppearance(), null, 2));
+  lines.push('');
+  lines.push('--- Homes & config ---');
+  lines.push(JSON.stringify({ grid: GRID, boardSize: BOARD_SIZE, coloredFraction: COLORED_FRACTION, rollSeconds: ROLL_SECONDS, homes: HOMES, skyMode: SKY_MODES[getSkyMode()] }, null, 2));
+  lines.push('');
+  lines.push('--- Session records (top 10) ---');
+  lines.push(JSON.stringify(getSessionRecords(), null, 2));
+  return lines.join('\n');
+}
+
+function openCopyOverlay(text) {
+  copyText.value = text;
+  copyOverlay.classList.add('open');
+  copyText.focus();
+  copyText.select();
+}
+
+function closeCopyOverlay() {
+  copyOverlay.classList.remove('open');
+}
+
+async function copyTextFromOverlay() {
+  const text = copyText.value;
+  const done = () => { closeCopyOverlay(); setMessage('Debug info copied to clipboard.'); updateHUD(); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try { await navigator.clipboard.writeText(text); done(); return; } catch (e) { /* fall through */ }
+  }
+  try {
+    copyText.focus();
+    copyText.select();
+    if (document.execCommand('copy')) { done(); return; }
+  } catch (e) { /* fall through */ }
+  setMessage('Copy failed — select the text and copy it by hand.');
+  updateHUD();
+}
+
+async function copyDebugDump() {
+  const text = buildDebugDump();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage('Debug info copied to clipboard.');
+      updateHUD();
+      return;
+    } catch (e) { /* fall through to the textbox */ }
+  }
+  openCopyOverlay(text);
+  setMessage('Clipboard write failed — copy the text from the box.');
+  updateHUD();
+}
+document.getElementById('btnCopyDebug').addEventListener('click', copyDebugDump);
+document.getElementById('btnCopyText').addEventListener('click', copyTextFromOverlay);
+document.getElementById('btnCopyClose').addEventListener('click', closeCopyOverlay);
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && copyOverlay.classList.contains('open')) closeCopyOverlay(); });
+
 // --- XR controllers: thumbstick roll + two-grip world drag ---------------------
 const controller0 = renderer.xr.getController(0);
 const controller1 = renderer.xr.getController(1);
@@ -1067,8 +1155,10 @@ try {
   }
   // Saves from before the split have no cubeIcons entry, and their shapes
   // rendered at the face opacity — keep that as the shape opacity rather
-  // than the fresh default, so the cube looks the same as before.
-  if (!saved || !saved.cubeIcons) appearance.cubeIcons.a = appearance.cube.a;
+  // than the fresh default, so the cube looks the same as before. Only
+  // when a save exists: a fresh load (no save) must keep the config
+  // default instead.
+  if (saved && !saved.cubeIcons) appearance.cubeIcons.a = appearance.cube.a;
   if (!Number.isFinite(appearance.shapeBorder.w)) appearance.shapeBorder.w = SHAPE_BORDER_WIDTH;
 } catch { /* ignore bad or unavailable storage */ }
 setAppearance(appearance);

@@ -32,8 +32,8 @@ export const INITIAL_ORIENTATION = { up: 2, down: 5, north: 1, south: 3, east: 0
 // Board appearance
 export const BOARD_COLOR = '#000584';
 export const BOARD_OPACITY = 0.34;
-export const BOARD_ICON_OPACITY = 1; // board shapes (flat icons): 1 = fully opaque; lower toward 0.6 to match the cube faces
-export const GRID_COLOR = 0x000000; // black — user's colour choice (Nov 5, 2026); was yellow 0xfff005
+export const BOARD_ICON_OPACITY = 0.8; // board shapes (flat icons) — user's choice (Nov 5, 2026)
+export const GRID_COLOR = 0x0c3700; // dark green — user's colour choice (Nov 5, 2026); was black 0x000000
 // Cube faces: one background colour for ALL faces (see rebuildCubeFaces in
 // main.js); the shape on each face is drawn in that shape's own colour, as on
 // the board. The background must therefore not be any of the six shape
@@ -42,11 +42,11 @@ export const GRID_COLOR = 0x000000; // black — user's colour choice (Nov 5, 20
 // neutral grey lets every shape colour read: red, green, blue, yellow,
 // purple and orange all pop on it.
 export const CUBE_FACE_COLOR = '#222222';
-export const CUBE_OPACITY = 0.6;
-export const CUBE_ICON_OPACITY = CUBE_OPACITY; // cube shapes: default = the face opacity, so the cube looks exactly as before until the slider moves
+export const CUBE_OPACITY = 0.4; // user's choice (Nov 5, 2026); was 0.6
+export const CUBE_ICON_OPACITY = 0.9; // cube shapes — user's choice (Nov 5, 2026)
 export const CUBE_EDGE_COLOR = '#055200';
 export const SHAPE_BORDER_COLOR = '#000000';
-export const SHAPE_BORDER_WIDTH = 4; // px on the 256 px icon texture
+export const SHAPE_BORDER_WIDTH = 5; // px on the 256 px icon texture — user's choice (Nov 5, 2026); was 4
 
 // World positioning
 export const HOMES = {
