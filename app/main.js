@@ -16,7 +16,7 @@ import { CELL, CUBE, BOARD_DEPTH, START_COL, START_ROW, COLORS, INITIAL_ORIENTAT
 import { SESSION_DEFAULTS } from './sessionConfig.js';
 
 // Import utilities
-import { cellToLocal, keyOf, hsvCss, cssToHsv, apClamp01, formatTime, triggerHaptic, setHapticGamepad } from './utils.js';
+import { cellToLocal, keyOf, shapeName, hsvCss, cssToHsv, apClamp01, formatTime, triggerHaptic, setHapticGamepad } from './utils.js';
 
 // Import state management
 import {
@@ -245,13 +245,16 @@ const cubeIconTextures = createCubeIconTextures();
 // Initialize cube
 initCube(cubeIconTextures);
 const cube = getCube();
+// The cube's only edge set (v40: cube.js used to add a second,
+// identical one inside initCube — removed, so an edge opacity
+// slider would not render darker than the number says).
 const cubeEdgeMaterial = new THREE.LineBasicMaterial({ color: defAppearance.edges.color });
 cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE, CUBE, CUBE)), cubeEdgeMaterial));
 worldGroup.add(cube);
 
 // --- In-world status text (tilted up beyond the far edge) ---
 // Past the north edge, tilted 30 degrees up from the board plane and facing
-// the player on the south side. As wide as the board (2.0 m) and just
+// the player on the south side. As wide as the board (3.09 m) and just
 // tall enough to hold the text. Its bottom edge sits level with the
 // board: the panel is 0.5 m tall at a 60-degree tilt, so its bottom
 // edge sits 0.125 m below its centre — v39 raised the centre from
@@ -261,13 +264,18 @@ worldGroup.add(cube);
 // it (see panelBorder below), and v40 fills it with the board face
 // colour at the board's opacity and adds a divider (panelDivider)
 // between the status lines and the message.
+// v40: the panel is as wide as the board — its canvas is 576 px per
+// metre, the same density as the 2.0 m panel's 1152 px canvas.
+const PANEL_PX_PER_M = 576;
+const PANEL_CANVAS_W = Math.round(BOARD_LAYOUT.boardSize * PANEL_PX_PER_M); // 1780
+const PANEL_HALF_W = BOARD_LAYOUT.boardSize / 2; // 1.545
 const panelCanvas = document.createElement('canvas');
-panelCanvas.width = 1152; panelCanvas.height = 288;
+panelCanvas.width = PANEL_CANVAS_W; panelCanvas.height = 288;
 const panelCtx = panelCanvas.getContext('2d');
 const panelTexture = new THREE.CanvasTexture(panelCanvas);
 panelTexture.colorSpace = THREE.SRGBColorSpace;
 const panel = new THREE.Mesh(
-  new THREE.PlaneGeometry(2.0, 0.5),
+  new THREE.PlaneGeometry(BOARD_LAYOUT.boardSize, 0.5),
   new THREE.MeshBasicMaterial({ map: panelTexture, transparent: true, side: THREE.DoubleSide })
 );
 panel.rotation.x = -Math.PI / 3;
@@ -284,10 +292,10 @@ worldGroup.add(panel);
 const panelBorderMaterial = new THREE.LineBasicMaterial({ color: gridColorHex });
 const panelBorder = new THREE.LineSegments(
   new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-1.0, -0.25, 0), new THREE.Vector3(1.0, -0.25, 0),
-    new THREE.Vector3(1.0, -0.25, 0), new THREE.Vector3(1.0, 0.25, 0),
-    new THREE.Vector3(1.0, 0.25, 0), new THREE.Vector3(-1.0, 0.25, 0),
-    new THREE.Vector3(-1.0, 0.25, 0), new THREE.Vector3(-1.0, -0.25, 0),
+    new THREE.Vector3(-PANEL_HALF_W, -0.25, 0), new THREE.Vector3(PANEL_HALF_W, -0.25, 0),
+    new THREE.Vector3(PANEL_HALF_W, -0.25, 0), new THREE.Vector3(PANEL_HALF_W, 0.25, 0),
+    new THREE.Vector3(PANEL_HALF_W, 0.25, 0), new THREE.Vector3(-PANEL_HALF_W, 0.25, 0),
+    new THREE.Vector3(-PANEL_HALF_W, 0.25, 0), new THREE.Vector3(-PANEL_HALF_W, -0.25, 0),
   ]),
   panelBorderMaterial
 );
@@ -296,14 +304,14 @@ panelBorder.visible = true;
 panel.add(panelBorder);
 
 // v40: a divider across the panel, in the same line as the border —
-// it splits the fixed top section (Level, Time, Face Down / Board)
-// from the temporary message below, so the top lines never move when
+// it splits the fixed top section (Level, Time, Cube shape / Board
+// shape) from the temporary message below, so the top lines never move when
 // the message appears or expires. Same material as the border, so it
 // follows the grid colour. Local y -0.118 is canvas y 212, between
-// the Face Down row (baseline 181) and the message row (baseline 258).
+// the Cube / Board row (baseline 181) and the message row (baseline 258).
 const panelDivider = new THREE.LineSegments(
   new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-1.0, -0.118, 0), new THREE.Vector3(1.0, -0.118, 0),
+    new THREE.Vector3(-PANEL_HALF_W, -0.118, 0), new THREE.Vector3(PANEL_HALF_W, -0.118, 0),
   ]),
   panelBorderMaterial
 );
@@ -337,7 +345,7 @@ worldGroup.add(debugPanel);
 
 // --- Top 10 Scores (flat in the board plane, left of the board) ---------------
 // 640 px per metre, so the 52 px text matches the 46 px text on the main panel
-// (1152 px across 2.0 m) in physical size.
+// (576 px per metre) in physical size.
 // v38: hidden in 2D — the side text is too hard to read from the desktop
 // camera, and the scores already live on the HUD panel. Shown by
 // sessionstart, hidden by sessionend, so it is an MR-only panel now.
@@ -594,8 +602,10 @@ function restartLevel() {
 const hud = document.getElementById('hud');
 const hudLevel = document.getElementById('hudLevel');
 const hudRemaining = document.getElementById('hudRemaining');
-const hudDown = document.getElementById('hudDown');
-const hudBoard = document.getElementById('hudBoard');
+const hudDownShape = document.getElementById('hudDownShape');
+const hudDownCube = document.getElementById('hudDownCube');
+const hudBoardWord = document.getElementById('hudBoardWord');
+const hudBoardShape = document.getElementById('hudBoardShape');
 const hudTime = document.getElementById('hudTime');
 const hudScore = document.getElementById('hudScore');
 const hudMessage = document.getElementById('hudMessage');
@@ -616,15 +626,17 @@ function updateHUD() {
   hudScore.textContent = String(levelScore);
   hudBuildTimestamp.textContent = `Build: ${BUILD_TIMESTAMP}`;
   const down = COLORS[orientation.down];
-  hudDown.textContent = down.name;
-  hudDown.style.color = down.css;
+  hudDownShape.textContent = shapeName(down.shape);
+  hudDownShape.style.color = down.css;
+  hudDownCube.style.color = down.css;
   // v39: the square under the cube, for the "Board:" half of the line —
   // the icon there, if any (getIcon returns undefined for a blank square).
   const pos = getCubePosition();
   const entry = getIcon(keyOf(pos.col, pos.row));
   const board = entry ? COLORS[entry.colorIndex] : null;
-  hudBoard.textContent = board ? board.name : 'Blank';
-  hudBoard.style.color = board ? board.css : '';
+  hudBoardWord.style.color = board ? board.css : '';
+  hudBoardShape.textContent = board ? shapeName(board.shape) : 'Blank';
+  hudBoardShape.style.color = board ? board.css : '';
   hudMessage.textContent = message;
   drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, board, message);
 }
@@ -635,35 +647,42 @@ function updateHUD() {
 function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, board, message) {
   // v40: the panel is filled with the board face colour (below), and
   // the text is split by the divider into a fixed top section — Level,
-  // Time, Face Down / Board — and a bottom section for the temporary
+  // Time, Cube shape / Board shape — and a bottom section for the temporary
   // message. The three top lines never move now: before, the block was
   // centred on the rows actually drawn, so it jumped up whenever the
   // message expired after 3 seconds.
   const appearance = getAppearance();
   const b = appearance.board;
-  panelCtx.clearRect(0, 0, 1152, 288);
+  panelCtx.clearRect(0, 0, PANEL_CANVAS_W, 288);
   // Fill with the board face colour, at the board's opacity, so the
   // panel reads as part of the board. globalAlpha carries the opacity;
   // the text is drawn after it is restored to 1.
   panelCtx.globalAlpha = b.a;
   panelCtx.fillStyle = hsvCss(b.h, b.s, b.v);
-  panelCtx.fillRect(0, 0, 1152, 288);
+  panelCtx.fillRect(0, 0, PANEL_CANVAS_W, 288);
   panelCtx.globalAlpha = 1;
   panelCtx.textAlign = 'center';
   panelCtx.fillStyle = '#ffffff';
   panelCtx.font = 'bold 46px system-ui, sans-serif';
-  panelCtx.fillText(`Level ${level}   Remaining: ${remaining}`, 576, 55);
-  panelCtx.fillText(`Time: ${levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds())}   Score: ${levelScore}`, 576, 121);
-  // Face Down / Board row (v39): two colour words, labels white.
+  panelCtx.fillText(`Level ${level}   Remaining: ${remaining}`, PANEL_CANVAS_W / 2, 55);
+  panelCtx.fillText(`Time: ${levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds())}   Score: ${levelScore}`, PANEL_CANVAS_W / 2, 121);
+  // Face Down / Board row (v40): shape names in their own colours —
+  // "<down shape> : Cube | Board: <board shape>". The shape words and
+  // the Cube / Board words take the colour of the face or square they
+  // belong to; the separators stay white. A blank square reads
+  // "Board: Blank", both in white.
   panelCtx.font = 'bold 42px system-ui, sans-serif';
   const parts = [
-    { text: 'Face Down: ', color: '#ffffff' },
-    { text: down.name, color: down.css },
-    { text: ', Board: ', color: '#ffffff' },
-    board ? { text: board.name, color: board.css } : { text: 'Blank', color: '#ffffff' },
+    { text: shapeName(down.shape), color: down.css },
+    { text: ' : ', color: '#ffffff' },
+    { text: 'Cube', color: down.css },
+    { text: ' | ', color: '#ffffff' },
+    { text: 'Board', color: board ? board.css : '#ffffff' },
+    { text: ': ', color: '#ffffff' },
+    board ? { text: shapeName(board.shape), color: board.css } : { text: 'Blank', color: '#ffffff' },
   ];
   const totalW = parts.reduce((sum, p) => sum + panelCtx.measureText(p.text).width, 0);
-  let x = 576 - totalW / 2;
+  let x = PANEL_CANVAS_W / 2 - totalW / 2;
   panelCtx.textAlign = 'left';
   for (const p of parts) {
     panelCtx.fillStyle = p.color;
@@ -677,7 +696,7 @@ function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, boa
   if (message) {
     panelCtx.fillStyle = '#ffffff';
     panelCtx.font = '32px system-ui, sans-serif';
-    panelCtx.fillText(message.length > 58 ? message.slice(0, 58) + '…' : message, 576, 258);
+    panelCtx.fillText(message.length > 89 ? message.slice(0, 89) + '…' : message, PANEL_CANVAS_W / 2, 258); // 89 chars fits the wider panel; was 58 at 1152 px
   }
   panelTexture.needsUpdate = true;
 }
@@ -710,6 +729,22 @@ updateSessionRecords();
 
 // --- Rolling ------------------------------------------------------------------
 
+// Edge feedback (v40): a buzz-buzz error sound plus a matching double
+// haptic pulse when a roll is rejected at the board edge. Throttled —
+// a held stick retries every 0.125 s, and buzzing on every retry would
+// machine-gun. The haptic fires on both hands (null = both, per
+// triggerHaptic); with no gamepad connected it is a silent no-op, so
+// the 2D keyboard path still gets the sound.
+let lastEdgeBuzzAt = 0;
+function playEdgeFeedback() {
+  const now = performance.now();
+  if (now - lastEdgeBuzzAt < 500) return;
+  lastEdgeBuzzAt = now;
+  playErrorBuzz();
+  triggerHaptic(0.7, 90, null);
+  window.setTimeout(() => triggerHaptic(0.7, 90, null), 160);
+}
+
 function tryRoll(dir) {
   const roll = getRoll();
   const win = getWin();
@@ -727,6 +762,7 @@ function tryRoll(dir) {
   if (destCol < 0 || destCol >= BOARD_LAYOUT.cols || destRow < 0 || destRow >= BOARD_LAYOUT.rows) {
     setMessage('Edge — can\'t roll that way.');
     updateHUD();
+    playEdgeFeedback();
     return;
   }
   
@@ -807,6 +843,29 @@ function playSwoop() {
   osc.connect(gain).connect(audioCtx.destination);
   osc.start(t);
   osc.stop(t + 0.28);
+}
+
+// Error buzz-buzz (no audio asset): two short low square-wave buzzes
+// for a rejected move, matching the double haptic pulse in
+// playEdgeFeedback. Same guard as the other sounds — silent when
+// audio is not running yet.
+function playErrorBuzz() {
+  const audioCtx = getAudioCtx();
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const t = audioCtx.currentTime;
+  for (let i = 0; i < 2; i++) {
+    const start = t + i * 0.16;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(140, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.12, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.12);
+  }
 }
 
 // --- Level-win celebration: particle burst plus a bouncing status panel ---
@@ -1230,8 +1289,8 @@ function buildSessionConfigScript() {
       boardIcons: { opacity: ap.boardIcons.a },
       cube: { color: hex(ap.cube), opacity: ap.cube.a },
       cubeIcons: { opacity: ap.cubeIcons.a },
-      grid: { color: hex(ap.grid) },
-      edges: { color: hex(ap.edges) },
+      grid: { color: hex(ap.grid), opacity: ap.grid.a },
+      edges: { color: hex(ap.edges), opacity: ap.edges.a },
       shapeBorder: { color: hex(ap.shapeBorder), width: ap.shapeBorder.w },
       ...Object.fromEntries(COLORS.map((col) => [col.shape, { fill: hex(ap[`${col.shape}.fill`]) }])),
     },
@@ -1767,14 +1826,15 @@ const APPEARANCE_BUTTON = 5; // B on the right Touch controller
 const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const AP_ITEMS = [
   { id: 'board', label: 'Board', parts: [{ id: '', label: 'Surface' }], alpha: true },
-  // Board icons have no colour of their own — each shape's colour comes
-  // from its Fill item — so this item is opacity-only: no picker, no
-  // brightness slider (see drawAppearance/drawAppearanceBase).
-  { id: 'boardIcons', label: 'Board icons', parts: [{ id: '', label: 'Icons' }], alpha: true, opacityOnly: true },
+  // v40: the two icon pages are one page now — neither has a colour
+  // of its own (each shape's colour comes from its Fill item), so
+  // both opacity sliders fit on one page. The board-icons slider
+  // lives at the brightness rect and the cube-icons slider at the
+  // opacity rect; see drawAppearance and the drag start below.
+  { id: 'icons', label: 'Icons', parts: [{ id: '', label: 'Board + Cube' }], alpha: true, opacityOnly: true, combinedIcons: true },
   { id: 'cube', label: 'Cube faces', parts: [{ id: '', label: 'Face colour' }], alpha: true },
-  { id: 'cubeIcons', label: 'Cube icons', parts: [{ id: '', label: 'Icons' }], alpha: true, opacityOnly: true },
-  { id: 'grid', label: 'Grid lines', parts: [{ id: '', label: 'Lines' }] },
-  { id: 'edges', label: 'Cube edges', parts: [{ id: '', label: 'Edges' }] },
+  { id: 'grid', label: 'Grid lines', parts: [{ id: '', label: 'Lines' }], alpha: true },
+  { id: 'edges', label: 'Cube edges', parts: [{ id: '', label: 'Edges' }], alpha: true },
   { id: 'shapeBorder', label: 'Shape borders', parts: [{ id: '', label: 'All shapes' }] },
   ...COLORS.map((col) => ({
     id: col.shape,
@@ -1795,8 +1855,8 @@ function buildDefaultAppearance() {
     boardIcons: { h: 0, s: 0, v: 1, a: defAppearance.boardIcons.opacity },
     cube: { ...cssToHsv(defAppearance.cube.color), a: defAppearance.cube.opacity },
     cubeIcons: { h: 0, s: 0, v: 1, a: defAppearance.cubeIcons.opacity },
-    grid: { ...cssToHsv(defAppearance.grid.color), a: 1 },
-    edges: { ...cssToHsv(defAppearance.edges.color), a: 1 },
+    grid: { ...cssToHsv(defAppearance.grid.color), a: defAppearance.grid.opacity },
+    edges: { ...cssToHsv(defAppearance.edges.color), a: defAppearance.edges.opacity },
   };
   for (const col of COLORS) {
     a[`${col.shape}.fill`] = { ...cssToHsv(defAppearance[col.shape].fill), a: 1 };
@@ -1817,6 +1877,16 @@ try {
     // as a background, white as a background would hide the yellow star.
     // Reset to the new dark-grey default, keeping opacity.
     saved.cube = { ...cssToHsv(defAppearance.cube.color), a: saved.cube.a };
+  }
+  // v40: the old grid default was dark green #0c3700 at full opacity;
+  // the new one is black at 25%. A save that still holds the old
+  // default (never customised) moves to the new one; a customised grid
+  // colour is left alone. #0c3700 is about h 107, s 1, v 0.216.
+  const isOldGridDefault = saved && saved.grid && (
+    Math.abs(saved.grid.h - 107) < 1 && Math.abs(saved.grid.s - 1) < 0.05 && Math.abs(saved.grid.v - 0.216) < 0.02
+  );
+  if (isOldGridDefault) {
+    saved.grid = { ...cssToHsv(defAppearance.grid.color), a: defAppearance.grid.opacity };
   }
   for (const key of Object.keys(appearance)) {
     if (saved && saved[key] && ['h', 's', 'v', 'a'].every((k) => Number.isFinite(saved[key][k]))) {
@@ -1866,6 +1936,17 @@ function applyLineColors() {
   grid.material.color.set(0xffffff);
   panelBorderMaterial.color.copy(c); // the status border and divider are grid lines too
   cubeEdgeMaterial.color.set(hsvCss(e.h, e.s, e.v));
+  // Opacity (v40): the grid lines, the status border and divider, and
+  // the cube edges each have their own opacity now. The border and
+  // divider follow the grid's opacity because they are grid-colour
+  // lines. transparent stays on so dragging the slider does not
+  // recompile the material; at opacity 1 it renders the same.
+  grid.material.transparent = true;
+  grid.material.opacity = g.a;
+  panelBorderMaterial.transparent = true;
+  panelBorderMaterial.opacity = g.a;
+  cubeEdgeMaterial.transparent = true;
+  cubeEdgeMaterial.opacity = e.a;
 }
 function applyShapeStyles() {
   const appearance = getAppearance();
@@ -1939,7 +2020,7 @@ function updateColorTable() {
   const hex = (t) => hsvCss(t.h, t.s, t.v);
   const rows = ['Item           Color    Opacity Border'];
   for (const [key, t] of Object.entries(appearance)) {
-    const alpha = key === 'board' || key === 'cube' || key === 'boardIcons' || key === 'cubeIcons' ? `${Math.round(t.a * 100)}%` : '-';
+    const alpha = key === 'board' || key === 'cube' || key === 'boardIcons' || key === 'cubeIcons' || key === 'grid' || key === 'edges' ? `${Math.round(t.a * 100)}%` : '-';
     const width = isBorderKey(key) ? `${Math.round(t.w)}px` : '-';
     const color = key === 'boardIcons' || key === 'cubeIcons' ? '-' : hex(t);
     rows.push(`${key.padEnd(14)} ${color} ${alpha.padEnd(7)} ${width}`);
@@ -2072,8 +2153,16 @@ function drawAppearance(force = false) {
     bright.addColorStop(1, hsvCss(t.h, t.s, 1));
     drawSlider(AP_BRIGHT, `Brightness ${Math.round(t.v * 100)}%`, t.v, bright);
   }
-  if (item.alpha) drawSlider(AP_OPACITY, `Opacity ${Math.round(t.a * 100)}%`, t.a, item.opacityOnly ? '#404050' : hsvCss(t.h, t.s, t.v));
-  if (isBorderKey(apKey())) drawSlider(AP_OPACITY, `Border width ${Math.round(t.w)}`, t.w / BORDER_WIDTH_MAX, '#404050');
+  if (item.combinedIcons) {
+    // One page, two sliders: board icons at the brightness rect,
+    // cube icons at the opacity rect. Both are opacity-only, so the
+    // picker area above stays empty, as on the old single pages.
+    drawSlider(AP_BRIGHT, `Board icons Opacity ${Math.round(appearance.boardIcons.a * 100)}%`, appearance.boardIcons.a, '#404050');
+    drawSlider(AP_OPACITY, `Cube icons Opacity ${Math.round(appearance.cubeIcons.a * 100)}%`, appearance.cubeIcons.a, '#404050');
+  } else {
+    if (item.alpha) drawSlider(AP_OPACITY, `Opacity ${Math.round(t.a * 100)}%`, t.a, item.opacityOnly ? '#404050' : hsvCss(t.h, t.s, t.v));
+    if (isBorderKey(apKey())) drawSlider(AP_OPACITY, `Border width ${Math.round(t.w)}`, t.w / BORDER_WIDTH_MAX, '#404050');
+  }
   appearanceTexture.needsUpdate = true;
 }
 
@@ -2089,11 +2178,14 @@ function setAppearanceOpenLocal(open) {
 }
 
 function applyAppearanceDrag(px, py) {
-  const key = apKey();
+  const appearanceDrag = getAppearanceDrag();
+  // v40: on the combined Icons page the drag carries its own key
+  // ('opacity:boardIcons' / 'opacity:cubeIcons'); everywhere else
+  // the key is the selected item+part.
+  const key = appearanceDrag && appearanceDrag.startsWith('opacity:') ? appearanceDrag.slice(8) : apKey();
   const appearance = getAppearance();
   const t = appearance[key];
   let changed = false;
-  const appearanceDrag = getAppearanceDrag();
   if (appearanceDrag === 'picker') {
     const h = apClamp01((px - AP_PICKER.x) / AP_PICKER.w) * 360;
     const s = 1 - apClamp01((py - AP_PICKER.y) / AP_PICKER.h);
@@ -2104,7 +2196,7 @@ function applyAppearanceDrag(px, py) {
     const v = apClamp01((px - AP_BRIGHT.x) / AP_BRIGHT.w);
     changed = v !== t.v;
     t.v = v;
-  } else if (appearanceDrag === 'opacity') {
+  } else if (appearanceDrag === 'opacity' || (appearanceDrag && appearanceDrag.startsWith('opacity:'))) {
     if (isBorderKey(key)) {
       const w = apClamp01((px - AP_OPACITY.x) / AP_OPACITY.w) * BORDER_WIDTH_MAX;
       changed = w !== t.w;
@@ -2186,7 +2278,9 @@ function updateAppearance(triggerHeld, rightStick) {
     } else if (hit.y >= AP_PARTS.y && hit.y <= AP_PARTS.y + AP_PARTS.h) {
       const part = Math.min(item.parts.length - 1, Math.max(0, Math.floor((hit.x - 10) / ((AP_W - 20) / item.parts.length))));
       if (part !== getAppearancePart()) { flushAppearance(); setAppearancePart(part); drawAppearance(true); }
-    } else if (!item.opacityOnly && inRect(AP_PICKER, 0)) setAppearanceDrag('picker');
+    } else if (item.combinedIcons && inRect(AP_BRIGHT, 14)) setAppearanceDrag('opacity:boardIcons');
+    else if (item.combinedIcons && inRect(AP_OPACITY, 14)) setAppearanceDrag('opacity:cubeIcons');
+    else if (!item.opacityOnly && inRect(AP_PICKER, 0)) setAppearanceDrag('picker');
     else if (!item.opacityOnly && inRect(AP_BRIGHT, 14)) setAppearanceDrag('bright');
     else if ((item.alpha || isBorderKey(apKey())) && inRect(AP_OPACITY, 14)) setAppearanceDrag('opacity');
   }

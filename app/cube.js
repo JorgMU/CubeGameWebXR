@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CUBE, INITIAL_ORIENTATION } from './config.js';
 import { cellToLocal } from './utils.js';
-import { createCubeMaterials, createCubeShapeMaterials, createCubeEdgeMaterial } from './materials.js';
+import { createCubeMaterials, createCubeShapeMaterials } from './materials.js';
 
 let cube;
 let cubeMaterials;
@@ -55,8 +55,10 @@ export function initCube(iconTextures) {
     cube.add(shapeMesh);
   });
 
-  const cubeEdgeMaterial = createCubeEdgeMaterial();
-  cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE, CUBE, CUBE)), cubeEdgeMaterial));
+  // v40: no edges here any more — main.js adds the cube's only edge
+  // set after initCube, and that is the one applyLineColors updates
+  // (B-panel colour, Reset Colors). This one was a second, identical
+  // set that nobody ever updated, drawn underneath the other.
 
   return cube;
 }

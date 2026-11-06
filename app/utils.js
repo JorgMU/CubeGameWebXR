@@ -18,6 +18,11 @@ export function keyOf(col, row) {
   return `${col},${row}`;
 }
 
+// Display name for a shape id ('hexagon' -> 'Hexagon').
+export function shapeName(shape) {
+  return shape.charAt(0).toUpperCase() + shape.slice(1);
+}
+
 // Color utilities
 export function hsvToRgb(h, s, v) {
   const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1));

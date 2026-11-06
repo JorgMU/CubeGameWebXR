@@ -14,8 +14,8 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 - A cube has dark-grey faces (`CUBE_FACE_COLOR` `#222222`) at 40% opacity
   (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
   shape and colour as the board icons). Current colours, from the appearance
-  panel's colour table: board `#000584`, cube `#222222`, grid `#0c3700`,
-  edges `#055200`, circle `#c10303`, triangle `#049f27`, square `#354cff`,
+  panel's colour table: board `#000584`, cube `#222222`, grid `#000000` at 25%
+  opacity, edges `#055200`, circle `#c10303`, triangle `#049f27`, square `#354cff`,
   star `#f1c40f`, diamond `#9b59b6`, hexagon `#e67e22`, shape border
   `#000000` 5 px. Red, Green, Blue, Yellow, Purple, Orange.
 - The cube is transparent, and its six faces are separate planes, so the
@@ -30,7 +30,10 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 - A new level is a new random pattern: about 50% of squares coloured,
   the rest blank (the start square is always blank). Generation
   guarantees at least 6 coloured squares. There is no lose
-  condition in the current version. Rolling off the edge is blocked.
+  condition in the current version. Rolling off the edge is blocked,
+  with a buzz-buzz error sound and a matching double haptic pulse
+  on both controllers (throttled to one buzz per half second while
+  the stick is held against the edge).
 
 ## Scores
 
@@ -106,12 +109,15 @@ and Purple west.
   and Y as 5; the debug readout's "Left buttons down" line shows the indices.)
 - **Right B button**: opens/closes the appearance panel on the right controller. Point the left controller at
   it and hold the left trigger to drag. The `<` / `>` buttons, or the **right thumbstick left/right**, step
-  through the items in order (Board, Board icons, Cube faces, Cube icons, Grid lines, Cube edges,
+  through the items in order (Board, Icons, Cube faces, Grid lines, Cube edges,
   Shape borders, then each shape's Fill: Circle, Triangle, Square, Star, Diamond, Hexagon); the stick
   wraps around and also walks between an item's parts when it has more than one. "Shape borders" is a
   single colour and width shared by every shape. The colour picker (hue across, saturation down) and
-  Brightness slider update live; Opacity appears for the board, board icons, cube faces and cube icons.
-  "Board icons" and "Cube icons" have only the Opacity slider — their colours come from the shape fills.
+  Brightness slider update live; Opacity appears for the board, cube faces, icons,
+  grid lines and cube edges — the two line opacities are separate values. The grid lines default to
+  black at 25% opacity: bright line colours flicker with aliasing and foveated rendering.
+  "Icons" has two Opacity sliders — one for the board icons, one for the cube icons — and no colour
+  picker: the icon colours come from the shape fills.
   The cube faces and their shapes have separate opacities: each shape sits on its own plane just outside
   its face, so the face can stay translucent while the shapes stay solid, or the other way round. Try the
   board icons near 40% to match the cube faces at their default. Shape borders gets a Border
@@ -119,7 +125,7 @@ and Purple west.
   `localStorage`.
   The stick and trigger are captured while it is open. The help panel
   (bottom left) shows a selectable table of every current
-  colour (hex) and the board, board-icon and cube opacity, hidden with the debug readout, so you can copy
+  colour (hex) and the board, board-icon, cube, grid-line and cube-edge opacity, hidden with the debug readout, so you can copy
   values as defaults.
 
 ### Desktop (for testing logic without a headset)
@@ -366,7 +372,7 @@ numbers; what you see is the difference between them.
 - `app/main.js` — game flow: board, cube orientation and rolling
   animation, flat icons, level generation, thumbstick/grip input,
   appearance/menu panels, scores, and the in-world status text (tilted
-  up past the far edge, 2.0 m wide, its bottom edge level with the
+  up past the far edge, as wide as the board at 3.09 m, its bottom edge level with the
   board, filled with the board face colour, with a grid-line border
   and a divider between the status lines and the message),
   and the sky background. Shared state lives in

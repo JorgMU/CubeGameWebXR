@@ -121,6 +121,11 @@
     text-shadow: 0 0 6px rgba(0,255,102,0.9) !important;
     box-shadow: 0 0 8px rgba(0,255,102,0.7), 0 0 18px rgba(0,255,102,0.35) !important;
   }
+  /* Credit line, bottom right — the MR button's rest text colour and
+     size (#007a33, 13px), but plain text: no border, no background.
+     It sits on the page only (not in the headset) and stays put when
+     the HUD panel hides. */
+  #credit { position: fixed; right: 12px; bottom: 12px; z-index: 10; color: #007a33; font: normal 13px sans-serif; pointer-events: none; }
   #help { font-size: 12px; opacity: 0.85; margin-top: 6px; }
 </style>
 <script type="importmap">
@@ -154,7 +159,7 @@
 <div id="hud">
   <div>Level: <b id="hudLevel">1</b> &nbsp; Remaining: <b id="hudRemaining">–</b></div>
   <div>Time: <b id="hudTime">Ready</b> &nbsp; Score: <b id="hudScore">0</b></div>
-  <div>Face Down: <b id="hudDown">–</b>, Board: <b id="hudBoard">–</b></div>
+  <div><b id="hudDownShape">–</b> : <b id="hudDownCube">Cube</b> | <b id="hudBoardWord">Board</b>: <b id="hudBoardShape">–</b></div>
   <div id="hudMessage">Roll the cube onto a matching flat icon.</div>
   <div id="hudBuildTimestamp"></div>
   <details id="records">
@@ -196,6 +201,7 @@
     </div>
   </div>
 </div>
+<div id="credit">2026 JorgTheElder@outlook.com</div>
 <canvas id="renderCanvas"></canvas>
 <script>
   // Pre-load check: work out the newest Last-Modified among all served

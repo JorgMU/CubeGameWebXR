@@ -52,10 +52,6 @@ export function createCubeShapeMaterials(iconTextures, cubeFaceColorIndices) {
   return cubeFaceColorIndices.map(colorIndex => createCubeShapeMaterial(colorIndex, iconTextures));
 }
 
-export function createCubeEdgeMaterial() {
-  return new THREE.LineBasicMaterial({ color: ap.edges.color });
-}
-
 // Board materials
 export function createBoardMaterial() {
   const boardTex = makeIconTexture('square', ap.board.color);
