@@ -766,32 +766,45 @@ document.getElementById('btnClearScores').addEventListener('click', clearScores)
 document.getElementById('btnForceRefresh').addEventListener('click', () => { const url = new URL(location.href); url.searchParams.set('fresh', String(Date.now())); location.href = url.toString(); });
 
 // --- Copy settings (2D only) ------------------------------------------------
-// A 2D HUD button that copies the current settings as one JSONC object:
-// boardLayout, boardHome_2D, boardHome_MR, appearance, skybox. Colours are hex, as in
-// config.js, so the dump pastes straight into a settings file. In 2D the
+// A 2D HUD button that copies the current settings as ECMAScript:
+// `export const SESSION_DEFAULTS = { ... }`, ready to paste into
+// app/sessionConfig.js. Colours are hex, as in config.js. In 2D the
 // page is focused and the click is a user gesture, so
 // navigator.clipboard.writeText() works there — inside an immersive
 // session it does not reliably (no page focus, and a controller trigger
 // is not the gesture the browser wants), which is why this button lives
 // in the 2D HUD only and there is no in-headset copy.
-// If the clipboard write fails (or the API is unavailable), the dump is
-// shown in a textbox instead — the pattern other pages use with an
+// If the clipboard write fails (or the API is unavailable), the script
+// is shown in a textbox instead — the pattern other pages use with an
 // iframe + textbox + copy button, done here as a plain overlay because
 // no iframe is needed on the same page — with its own Copy button
 // (clipboard API, then the old textarea/execCommand fallback) and Close.
 const copyOverlay = document.getElementById('copyOverlay');
 const copyText = document.getElementById('copyText');
 
-function buildSettingsDump() {
+// Small serializer: like JSON.stringify with 2-space indent, but object
+// keys are left unquoted when they are valid identifiers, so the output
+// is ECMAScript rather than JSON. Strings stay double-quoted via
+// JSON.stringify, which is valid JS too.
+function toJS(value, level) {
+  const pad = '  '.repeat(level);
+  const padIn = '  '.repeat(level + 1);
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    return '[\n' + value.map((v) => padIn + toJS(v, level + 1)).join(',\n') + '\n' + pad + ']';
+  }
+  const entries = Object.entries(value);
+  if (entries.length === 0) return '{}';
+  const key = (k) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) ? k : JSON.stringify(k);
+  return '{\n' + entries.map(([k, v]) => padIn + key(k) + ': ' + toJS(v, level + 1)).join(',\n') + '\n' + pad + '}';
+}
+
+function buildSessionConfigScript() {
   const ap = getAppearance();
   const hex = (e) => hsvCss(e.h, e.s, e.v);
   const d = HOMES.desktop, m = HOMES.mr;
   const orientation = getOrientation();
-  // JSONC: JSON with // comments. JSON.stringify cannot emit comments, so
-  // each section is stringified on its own and the comment lines are
-  // added around it. The result still parses as JSON once the comment
-  // lines are stripped, and it is the shape a config.jsonc file would use.
-  const ind = (v, n) => JSON.stringify(v, null, 2).split('\n').join('\n' + ' '.repeat(n));
   const settings = {
     boardLayout: {
       grid: GRID,
@@ -826,24 +839,24 @@ function buildSettingsDump() {
     },
   };
   const lines = [];
-  lines.push('// CubeGameWebXR settings — copied ' + new Date().toISOString());
+  lines.push('// CubeGameWebXR session defaults — copied ' + new Date().toISOString());
   lines.push('// Build: ' + BUILD_TIMESTAMP + ' — Level ' + getLevel() + ', ' + getRemaining() + ' remaining, face down ' + COLORS[orientation.down].name);
   lines.push('// These are the live values (saved appearance included). Paste into');
-  lines.push('// app/config.jsonc to make them the defaults — but note the saved');
+  lines.push('// app/sessionConfig.js to make them the defaults — but note the saved');
   lines.push('// appearance in this browser still wins until it is cleared.');
-  lines.push('{');
+  lines.push('export const SESSION_DEFAULTS = {');
   lines.push('  // Board layout — geometry shared by 2D and MR');
-  lines.push('  "boardLayout": ' + ind(settings.boardLayout, 2) + ',');
+  lines.push('  boardLayout: ' + toJS(settings.boardLayout, 1) + ',');
   lines.push('  // Board home, 2D (desktop browser)');
-  lines.push('  "boardHome_2D": ' + ind(settings.boardHome_2D, 2) + ',');
+  lines.push('  boardHome_2D: ' + toJS(settings.boardHome_2D, 1) + ',');
   lines.push('  // Board home, MR (Quest passthrough)');
-  lines.push('  "boardHome_MR": ' + ind(settings.boardHome_MR, 2) + ',');
+  lines.push('  boardHome_MR: ' + toJS(settings.boardHome_MR, 1) + ',');
   lines.push('  // Appearance — everything editable from the B-button panel. Colours are hex, opacity 0–1.');
   lines.push('  // boardIcons / cubeIcons are opacity-only: their shapes take their colour from the Fill items.');
-  lines.push('  "appearance": ' + ind(settings.appearance, 2) + ',');
+  lines.push('  appearance: ' + toJS(settings.appearance, 1) + ',');
   lines.push('  // Skybox — Passthrough only exists inside an MR session; leaving a session resets it to Adjusted');
-  lines.push('  "skybox": ' + ind(settings.skybox, 2));
-  lines.push('}');
+  lines.push('  skybox: ' + toJS(settings.skybox, 1));
+  lines.push('};');
   return lines.join('\n');
 }
 
@@ -873,8 +886,8 @@ async function copyTextFromOverlay() {
   updateHUD();
 }
 
-async function copySettingsDump() {
-  const text = buildSettingsDump();
+async function copySessionConfig() {
+  const text = buildSessionConfigScript();
   if (navigator.clipboard && navigator.clipboard.writeText) {
     try {
       await navigator.clipboard.writeText(text);
@@ -887,7 +900,7 @@ async function copySettingsDump() {
   setMessage('Clipboard write failed — copy the text from the box.');
   updateHUD();
 }
-document.getElementById('btnCopySettings').addEventListener('click', copySettingsDump);
+document.getElementById('btnCopySettings').addEventListener('click', copySessionConfig);
 document.getElementById('btnCopyText').addEventListener('click', copyTextFromOverlay);
 document.getElementById('btnCopyClose').addEventListener('click', closeCopyOverlay);
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && copyOverlay.classList.contains('open')) closeCopyOverlay(); });
