@@ -33,7 +33,10 @@
      bright green on hover. No opacity fade — the old 0.5 fade is what
      washed the green out to a bland grey. */
   #hudButtons button {
-    padding: 8px 6px; border: 1px solid #007a33; border-radius: 4px;
+    /* v36: 6px 12px — the side padding is double the old 6px and the
+       top/bottom is 25% less than the old 8px, so the labels and keys
+       have more air at the sides and the buttons sit a little shorter. */
+    padding: 6px 12px; border: 1px solid #007a33; border-radius: 4px;
     background: rgba(0,0,0,0.35); color: #007a33; cursor: pointer;
     font: normal 13px sans-serif; text-align: center; outline: none;
   }
@@ -45,12 +48,30 @@
   /* v33: the hotkey shown on a button as a little keycap — the same
      convention real apps use, so it reads as "press this key" instead
      of punctuation after the word. One shared style for every button,
-     including wide ones like TAB and symbols like * [ ] + -. */
-  #hudButtons .key {
-    display: inline-block; border: 1px solid currentColor; border-radius: 3px;
-    padding: 0 5px; margin-left: 6px; font: 11px Consolas, monospace;
-    opacity: 0.85;
+     including wide ones like TAB and symbols like * [ ] + -.
+     v34: the box is gone — the key is just bold and underlined, and
+     each button is a flex row so the key sits at the right edge and
+     all the keys line up in a column. */
+  #hudButtons button {
+    display: flex; justify-content: space-between; align-items: center;
   }
+  /* v34: the hotkey at the right edge of each button, bold. */
+  /* v36: no underline — right-justified, the keys are set off enough as they are. */
+  #hudButtons .key {
+    font: bold 13px Consolas, monospace;
+    margin-left: 12px;
+  }
+  /* v34: the help panel — everything that used to sit below the
+     session scores in the main panel (debug readout, colour table,
+     help text) lives here instead, at the bottom right, off by
+     default. Same dark-box style as the main panel. */
+  #helpPanel {
+    position: absolute; bottom: 12px; left: 12px; z-index: 10;
+    background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.5; max-width: 420px;
+    display: none;
+  }
+  #helpPanel.open { display: block; }
   /* Copy-settings overlay: a dark box with the dump in a textbox, shown only
      when the clipboard write fails (same idea as the iframe + textbox +
      copy button pattern). Hidden otherwise. */
@@ -113,18 +134,21 @@
 <body>
 <div id="hudButtons">
   <button id="btnHidePanel">Hide/Show Panel <span class="key">TAB</span></button>
+  <button id="btnHelp">Show/Hide Help <span class="key">?</span></button>
   <button id="btnNext">Next Level <span class="key">N</span></button>
   <button id="btnRestart">Restart Level <span class="key">R</span></button>
   <button id="btnClearScores">Clear Scores <span class="key">X</span></button>
   <button id="btnDebug">Show Debug <span class="key">*</span></button>
   <button id="btnCopySettings">Copy Settings <span class="key">C</span></button>
-  <button id="btnForceRefresh">Force Refresh <span class="key">F</span></button>
   <button id="btnResetColors">Reset Colors <span class="key">O</span></button>
   <button id="btnResetHome">Reset Home <span class="key">H</span></button>
   <button id="btnTiltUp">Tilt Up <span class="key">[</span></button>
   <button id="btnTiltDown">Tilt Down <span class="key">]</span></button>
   <button id="btnZoomIn">Zoom In <span class="key">+</span></button>
   <button id="btnZoomOut">Zoom Out <span class="key">-</span></button>
+  <button id="btnRotateLeft">Rotate Left <span class="key">&lt;</span></button>
+  <button id="btnRotateRight">Rotate Right <span class="key">&gt;</span></button>
+  <button id="btnForceRefresh">Force Refresh <span class="key">F</span></button>
 </div>
 <div id="hud">
   <div>Level: <b id="hudLevel">1</b> &nbsp; Remaining: <b id="hudRemaining">–</b></div>
@@ -133,19 +157,21 @@
   <div id="hudMessage">Roll the cube onto a matching flat icon.</div>
   <div id="hudBuildTimestamp"></div>
   <details id="records">
-    <summary>Session scores (top 10)</summary>
+    <summary>Top 10 Scores</summary>
     <table>
       <thead><tr><th>Level</th><th>Score</th><th>Time</th><th>Completed</th></tr></thead>
       <tbody id="hudRecords"><tr><td colspan="4">Complete a level to add a record.</td></tr></tbody>
     </table>
   </details>
+</div>
+<div id="helpPanel">
   <div id="hudDebug"></div>
   <div id="hudColors"></div>
   <div id="help">
     Quest: thumbstick rolls one square. Hold <b>one grip</b> to drag the world, or <b>both grips</b> to also rotate and scale:
     twist hands to rotate (yaw), move hands apart/together to scale. Press <b>B button</b> (right hand) to open the color picker.<br />
     Desktop: the buttons at the top right do everything; arrow keys roll the cube and the mouse wheel scales the world. Copy Settings copies the session defaults to the clipboard as ECMAScript, ready to paste into app/sessionConfig.js. Reset Colors clears the saved colours and restores the server defaults (no undo; scores are not touched).<br />
-    The clock starts on your first move. Each match is worth 180 points minus one point per elapsed second (minimum 0). The top 10 completed levels are kept across sessions (saved in your browser, like the colours), and shown in the table above and on the scores panel beside the board. Clear Scores wipes them.<br />
+    The clock starts on your first move. Each match is worth 180 points minus one point per elapsed second (minimum 0). The top 10 completed levels are kept across sessions (saved in your browser, like the colours), and shown in the main panel and on the scores panel beside the board. Clear Scores wipes them.<br />
     In MR after a win, pull a trigger to start the next level.
   </div>
 </div>

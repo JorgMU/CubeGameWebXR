@@ -35,7 +35,7 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 - The clock starts on your first move of a level. Each match is worth
   180 points minus one point per elapsed second (minimum 0).
 - Completing a level adds a record (level, score, time, date) to the
-  top 10, shown in the HUD table ("Session scores") and on the scores
+  top 10, shown in the HUD table ("Top 10 Scores") and on the scores
   panel beside the board in the world.
 - The top 10 **persist across sessions**: they are saved in
   `localStorage` under `cubeGameRecords` (like the appearance colours
@@ -75,18 +75,27 @@ and Purple west.
   Point the right controller at an item and pull its trigger: **Debug: On/Off**
   toggles the debug readout, **Sky: <mode>** shows the mode a click will switch to (the debug readout shows the current one) and cycles the star map
   between the tuned version, the unadjusted NASA data, a plain black background, and
-  (Quest, in the headset only) the real-world passthrough view, **Reset view**
-  returns the board to the MR start
-  view, and **Exit MR** ends the immersive session. The menu closes after any
-  selection. Choosing **Exit MR** shows a 3-second reminder on a panel facing
+  (Quest, in the headset only) the real-world passthrough view, **Reset Home**
+  returns the board to the MR start view, **Next Level** starts a new level,
+  **Restart Level** restarts the current level, **Clear Scores** and
+  **Reset Colors** each ask you to tap the same row again within 5 seconds to
+  confirm (there is no popup inside a session), and **Exit MR** ends the
+  immersive session. Below the rows, in small grey text, the menu says
+  "Exit MR for Other Options" — an inactive hint, not a button. The menu closes after any selection. Choosing **Exit MR** shows a 3-second reminder on a panel facing
   you above the table center, 0.4 m above eye height so it clears the board. Look forward; the Quest resets its
   front direction to where you are looking when the immersive session ends.
   There is also an **Exit MR** button on the board itself, flat in the board
-  plane at the south-east corner — half the size it was, its right edge flush
-  with the board's east edge and its top edge flush with the south edge —
-  point the right controller at it (it highlights bright green) and pull
-  the trigger. It only shows while a session is running, and it runs the
-  same 3-second exit as the menu row.
+  plane at the north-east corner — half the size it was, its right edge flush
+  with the board's east edge, at the board's own level (y 0) and 0.04 m north
+  of the north edge, so there is a clear gap between it and the board (it sits
+  just in front of the status panel) — point the right controller at it (it
+  highlights bright green, and a green laser draws from the controller to the
+  button; when you point away the laser stays for 2 s, still following where
+  the controller points, fading out) and pull the trigger. When nobody is
+  pointing at it its background is 95% transparent, so it sits quietly in
+  the corner as dark-green text and a border. It only shows
+  while a session is running, and it runs the same 3-second exit as the
+  menu row. Coming out of a session puts the board back at the 2D home pose.
   While the menu is open the thumbstick and trigger do not roll the cube or
   start a level.
   (On the Quest browser the left menu button is reported as button index 12
@@ -104,19 +113,21 @@ and Purple west.
   board icons near 40% to match the cube faces at their default. Shape borders gets a Border
   width slider (0-30 px on the icon texture). Grid lines stay 1 px (WebGL limit). Values are saved in
   `localStorage`.
-  The stick and trigger are captured while it is open. The 2D HUD shows a selectable table of every current
+  The stick and trigger are captured while it is open. The help panel
+  (bottom left) shows a selectable table of every current
   colour (hex) and the board, board-icon and cube opacity, hidden with the debug readout, so you can copy
   values as defaults.
 
 ### Desktop (for testing logic without a headset)
 - Arrow keys / WASD: roll.
 - Ctrl+Arrow keys: move the world (one cell, 0.2 m, per press; hold to slide). Ctrl+Up moves the board away from you, Ctrl+Down toward you, Ctrl+Left/Right sideways.
-- Q / E: rotate the world.
+- Q / E (or < / >): rotate the world. The **Rotate Left** /
+  **Rotate Right** buttons do the same.
 - + / - or mouse wheel: scale the world (scroll up / + enlarges ×1.1, scroll down / - shrinks ×0.9). The **Zoom In** / **Zoom Out** buttons do the same.
 - 0 or H: reset world position, rotation, and scale. The **Reset Home** button does the same.
   Home poses for 2D and MR are the `boardHome_2D` / `boardHome_MR`
   sections of `app/sessionConfig.js`; the MR one is used by the Quest
-  "Reset view" menu item and when a session starts.
+  "Reset Home" menu item and when a session starts.
 - *: show/hide the debug readout (small grey text; see "Debug readout" below).
   The **Show Debug** button in the top-right button bar does the same, and also
   refreshes the colour table at once, for use on the Quest where there
@@ -129,6 +140,11 @@ and Purple west.
   buttons. TAB again brings them back. The **Hide/Show Panel** button
   does the same with the mouse; only it and the MR button stay visible
   while everything is hidden.
+- ?: show/hide the help panel (bottom left — debug readout, colour
+  table, help text). The **Show/Hide Help** button does the same. The
+  help panel is off by default; the main panel keeps only the live
+  status (level, time, score, face down, message, build date) and the
+  session scores.
 - X: clear the saved top-10 scores (asks for confirmation; no undo). The **Clear Scores**
   button in the top-right button bar does the same.
 - Copy Settings (2D only): the **Copy Settings** button in the top-right
@@ -152,10 +168,11 @@ and Purple west.
   the cache). The **Force Refresh** button does the same.
 - N: next level. R: restart the current level (same pattern, icons restored).
 - The buttons in the top-right bar, in order, are Hide/Show Panel,
-  Next Level, Restart Level, Clear Scores, Show Debug, Copy Settings,
-  Force Refresh, Reset Colors, Reset Home, Tilt Up, Tilt Down, Zoom In
-  and Zoom Out. Each button shows its hotkey as a little keycap on the
-  button itself.
+  Show/Hide Help, Next Level, Restart Level, Clear Scores, Show Debug,
+  Copy Settings, Reset Colors, Reset Home, Tilt Up,
+  Tilt Down, Zoom In, Zoom Out, Rotate Left, Rotate Right and Force
+  Refresh. Each button shows its hotkey as a bold key at the
+  right edge of the button.
 
 ## Repo layout — what is served, and what is not
 
@@ -310,11 +327,13 @@ things make a changed file actually show up:
 
 ## Debug readout
 
-Small grey text, shown in the HTML HUD (top-left, desktop) and in the world
-just beyond the status text. Refreshed about 5 times a second. P toggles it.
+Small grey text, shown in the help panel (bottom left, desktop —
+open it with Show/Hide Help or ?) and in the world
+just beyond the status text. Refreshed about 5 times a second. * toggles it.
 The build timestamp is also shown in the HUD and debug readout, using
-`yyyy-MM-dd@HH:mm:ss`. Since this project has no build step, update the
-`BUILD_TIMESTAMP` constant in `app/main.js` whenever the app is changed.
+`yyyy-MM-dd@HH:mm:ss`. It is computed from the served files'
+Last-Modified headers (see buildTime.js), so it moves whenever a file
+changes.
 
 - **Player** — where the view is from: x/y/z in metres, and `facing`, the
   head's turn about the vertical axis (positive = counterclockwise from above).

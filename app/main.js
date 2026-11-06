@@ -259,7 +259,7 @@ debugPanel.rotation.x = -Math.PI / 2;
 debugPanel.position.set(BOARD_LAYOUT.boardSize / 2 + 1.8 / 2 + 0.05, 0.012, 0);
 worldGroup.add(debugPanel);
 
-// --- Session scores (flat in the board plane, left of the board) ---------------
+// --- Top 10 Scores (flat in the board plane, left of the board) ---------------
 // 640 px per metre, so the 52 px text matches the 46 px text on the main panel
 // (1024 px across 1.8 m) in physical size.
 const SCORES_W = 0.9, SCORES_H = 1.3;
@@ -278,16 +278,23 @@ scoresPanel.rotation.x = -Math.PI / 2;
 scoresPanel.position.set(-BOARD_LAYOUT.boardSize / 2 - SCORES_W / 2 - 0.05, 0.012, -BOARD_LAYOUT.boardSize / 2 + SCORES_H / 2);
 worldGroup.add(scoresPanel);
 
-// --- Exit MR button (flat in the board plane, bottom-right edge) ----------
-// Just past the south (near) edge at the east end, so it sits on the
-// board under the player's right hand. It only shows while an MR
+// --- Exit MR button (flat in the board plane, north-east corner) ----------
+// Just past the north (far) edge at the east end, in front of the status
+// panel. It only shows while an MR
 // session is running — there is nothing to exit in 2D — and it is
 // operated the same way as the Y menu: point the RIGHT controller at
 // it and pull the trigger. Pointing at it highlights it bright green.
-// v32: half the size it was, and aligned to the board's south-east
-// corner — its right edge flush with the board's east edge, its top
-// edge flush with the board's south edge, hugging the corner just
+// v32: half the size it was, and aligned to the board's corner — its
+// right edge flush with the board's east edge, hugging the corner just
 // outside the board instead of floating 0.05 m off it.
+// v35: at the board's own level (y 0, not 0.012) and 0.04 m outside
+// the board's edge, so there is a clear gap between it and the board
+// instead of it hugging the edge. (The gap was 0.4 m at first; that
+// put the button too low — south is downhill with the board's 30° MR
+// tilt — so it is 0.04 m.)
+// v36: moved from the south-east corner to the north-east one. The
+// status panel's lower edge sits ~0.02 m north of it, so it fits just
+// in front of the panel, in the board plane.
 const EXIT_BUTTON_W = 0.275, EXIT_BUTTON_H = 0.06875;
 const exitButtonCanvas = document.createElement('canvas');
 exitButtonCanvas.width = 512; exitButtonCanvas.height = 128;
@@ -296,7 +303,11 @@ const exitButtonTexture = new THREE.CanvasTexture(exitButtonCanvas);
 exitButtonTexture.colorSpace = THREE.SRGBColorSpace;
 function drawExitButton(hovered) {
   exitButtonCtx.clearRect(0, 0, exitButtonCanvas.width, exitButtonCanvas.height);
-  exitButtonCtx.fillStyle = 'rgba(0,0,0,0.35)';
+  // v36: when nobody is pointing at it the background is 95%
+  // transparent (alpha 0.05) — just the dark-green text and border
+  // showing, so it does not shout from the corner of the board.
+  // Pointed at, it is the usual translucent dark background.
+  exitButtonCtx.fillStyle = hovered ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.05)';
   exitButtonCtx.fillRect(0, 0, exitButtonCanvas.width, exitButtonCanvas.height);
   exitButtonCtx.strokeStyle = hovered ? '#00ff66' : '#007a33';
   exitButtonCtx.lineWidth = 6;
@@ -318,12 +329,32 @@ const exitButtonMesh = new THREE.Mesh(
 exitButtonMesh.rotation.x = -Math.PI / 2;
 exitButtonMesh.position.set(
   BOARD_LAYOUT.boardSize / 2 - EXIT_BUTTON_W / 2,
-  0.012,
-  BOARD_LAYOUT.boardSize / 2 + EXIT_BUTTON_H / 2
+  0,
+  -(BOARD_LAYOUT.boardSize / 2 + EXIT_BUTTON_H / 2 + 0.04)
 );
 exitButtonMesh.visible = false; // shown by sessionstart, hidden by sessionend
 worldGroup.add(exitButtonMesh);
 let exitButtonHover = false;
+
+// v35: laser pointer for the Exit MR button. A green line from the
+// right controller to the button while it is hovered.
+// v36: on ray-exit the laser does not freeze on the button any more —
+// it keeps following the controller, pointing where the controller
+// points at the last hit distance, and fades out over 2 s. Ray-enter
+// shows it; two seconds after ray-exit it is gone. It lives in the
+// scene (not the world group) because its endpoints are world
+// positions, and it is never frustum-culled because those endpoints
+// move every frame.
+const exitLaserGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]);
+const exitLaserMaterial = new THREE.LineBasicMaterial({ color: 0x00ff66, transparent: true, opacity: 0 });
+const exitLaser = new THREE.Line(exitLaserGeometry, exitLaserMaterial);
+exitLaser.visible = false;
+exitLaser.frustumCulled = false;
+scene.add(exitLaser);
+const exitLaserOrigin = new THREE.Vector3();
+let exitLaserUntil = 0; // performance.now() ms: the laser stays visible (fading) until this time
+let exitLaserDist = 1; // controller-to-button distance at the last hover, for the post-exit ray
+const EXIT_LASER_LINGER_MS = 2000;
 
 function drawScoresPanel(records) {
   const ctx = scoresCtx;
@@ -332,7 +363,7 @@ function drawScoresPanel(records) {
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffffff';
   ctx.font = `bold ${SCORES_FONT}px system-ui, sans-serif`;
-  ctx.fillText('Session scores', 20, 64);
+  ctx.fillText('Top 10 Scores', 20, 64);
   ctx.fillStyle = '#ffd166';
   ['Level', 'Score', 'Time'].forEach((label, i) => ctx.fillText(label, columns[i], 134));
   ctx.fillStyle = '#ffffff';
@@ -515,9 +546,18 @@ function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, mes
   panelCtx.textAlign = 'center';
   panelCtx.fillText(`Level ${level}   Remaining: ${remaining}`, 512, 58);
   panelCtx.fillText(`Time: ${levelStartedAt === null ? 'Ready' : formatTime(elapsedLevelSeconds())}   Score: ${levelScore}`, 512, 124);
-  panelCtx.fillStyle = down.css;
+  // v36: 'Face down:' stays white; only the colour word takes the colour.
   panelCtx.font = 'bold 42px system-ui, sans-serif';
-  panelCtx.fillText(`Face down: ${down.name}`, 512, 184);
+  const faceLabel = 'Face down: ';
+  const faceLabelW = panelCtx.measureText(faceLabel).width;
+  const faceNameW = panelCtx.measureText(down.name).width;
+  const faceX = 512 - (faceLabelW + faceNameW) / 2;
+  panelCtx.textAlign = 'left';
+  panelCtx.fillStyle = '#ffffff';
+  panelCtx.fillText(faceLabel, faceX, 184);
+  panelCtx.fillStyle = down.css;
+  panelCtx.fillText(down.name, faceX + faceLabelW, 184);
+  panelCtx.textAlign = 'center';
   panelCtx.fillStyle = '#ffffff';
   panelCtx.font = '32px system-ui, sans-serif';
   panelCtx.fillText(message.length > 58 ? message.slice(0, 58) + '…' : message, 512, 248);
@@ -810,8 +850,10 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'arrowright' || k === 'd') tryRoll('east');
   else if (k === 'n') nextLevel();
   else if (k === 'r') restartLevel();
-  else if (k === 'q') worldGroup.rotateOnWorldAxis(WORLD_UP, Math.PI / 12);
-  else if (k === 'e') worldGroup.rotateOnWorldAxis(WORLD_UP, -Math.PI / 12);
+  else if (k === 'q') rotateLeft();
+  else if (k === 'e') rotateRight();
+  else if (k === '<') rotateLeft(); // <: rotate left (same as Q)
+  else if (k === '>') rotateRight(); // >: rotate right (same as E)
   else if (k === '=' || k === '+') worldGroup.scale.multiplyScalar(1.1);
   else if (k === '-' || k === '_') worldGroup.scale.multiplyScalar(0.9);
   else if (k === '*') toggleDebug(); // *: show debug info (was D, was P)
@@ -820,6 +862,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'f') forceRefresh(); // F: force refresh
   else if (k === 'o') requestResetColors(); // O: reset colours to the server defaults (asks first, no undo)
   else if (k === 'h') resetHome(); // H: reset the board to its home position
+  else if (k === '?') toggleHelpPanel(); // ?: show/hide the help panel (bottom right)
   else if (k === '[') stepTilt(1); // [: tilt board up
   else if (k === ']') stepTilt(-1); // ]: tilt board down
   else if (k === 't') stepTilt(e.shiftKey ? -1 : 1); // desktop tilt: T up, Shift+T down (was missing in 2D mode)
@@ -848,6 +891,18 @@ function toggleHudPanel() {
   });
 }
 btnHidePanel.addEventListener('click', toggleHudPanel);
+
+// v34: the help panel — everything that used to sit below the
+// session scores in the main panel (debug readout, colour table, help
+// text) lives in its own panel at the bottom right, off by default.
+// The Show/Hide Help button and the ? key toggle it. It is
+// independent of the main panel: hiding the main panel does not close
+// it, and opening it does not show the main panel.
+const helpPanel = document.getElementById('helpPanel');
+function toggleHelpPanel() {
+  helpPanel.classList.toggle('open');
+}
+document.getElementById('btnHelp').addEventListener('click', toggleHelpPanel);
 
 // v33: confirmation dialog for the two destructive actions (Reset
 // Colors, Clear Scores). Same dark-box pattern as the copy overlay.
@@ -906,10 +961,21 @@ function resetColors() {
 }
 document.getElementById('btnResetColors').addEventListener('click', requestResetColors);
 
-// v33: Reset Home — the board back to its home position, tilt and
+// v36: Reset Home — the board back to its home position, tilt and
 // scale (2D home on desktop, MR home in a session). This used to be
 // inline in the 0 key; the Reset Home button and the H key use it now.
+// The setDrag(null) is the fix for a reset that sometimes did not
+// tilt back: while a drag is active, updateWorldDrag re-applies the
+// drag snapshot's pose (position, quaternion and scale) every frame,
+// so a reset made mid-drag was undone on the very next frame.
+// Clearing the drag here makes it re-snapshot at the home pose
+// instead, so the reset sticks. In pure 2D there is no other code
+// that writes the tilt after a reset, so if it ever happens again
+// the debug readout's tilt number tells which half failed: the old
+// tilt still showing means the reset did not run; 20 showing with
+// the board still tilted means the pose was overwritten after it.
 function resetHome() {
+  setDrag(null);
   if (renderer.xr.isPresenting) { resetWorldForMR(); }
   else {
     worldGroup.position.copy(HOME_2D.position);
@@ -929,6 +995,13 @@ function forceRefresh() {
   url.searchParams.set('fresh', String(Date.now()));
   location.href = url.toString();
 }
+// v34: named so the Rotate Left/Right buttons and the < > keys can
+// call the same actions as Q and E. Left is counterclockwise as seen
+// by the player (the Q direction).
+// v36: the step is 7.5° (Math.PI / 24), half the old 15° — the keys
+// and the buttons share these functions, so both step 7.5° now.
+function rotateLeft() { worldGroup.rotateOnWorldAxis(WORLD_UP, Math.PI / 24); }
+function rotateRight() { worldGroup.rotateOnWorldAxis(WORLD_UP, -Math.PI / 24); }
 document.getElementById('btnNext').addEventListener('click', nextLevel);
 document.getElementById('btnRestart').addEventListener('click', restartLevel);
 document.getElementById('btnDebug').addEventListener('click', toggleDebug);
@@ -940,6 +1013,8 @@ document.getElementById('btnTiltUp').addEventListener('click', () => stepTilt(1)
 document.getElementById('btnTiltDown').addEventListener('click', () => stepTilt(-1));
 document.getElementById('btnZoomIn').addEventListener('click', () => worldGroup.scale.multiplyScalar(1.1));
 document.getElementById('btnZoomOut').addEventListener('click', () => worldGroup.scale.multiplyScalar(0.9));
+document.getElementById('btnRotateLeft').addEventListener('click', rotateLeft);
+document.getElementById('btnRotateRight').addEventListener('click', rotateRight);
 
 // --- Copy settings (2D only) ------------------------------------------------
 // A 2D HUD button that copies the current settings as ECMAScript:
@@ -1104,6 +1179,7 @@ const gripHeld = getGripHeld(); // state.js array, single source of truth
 // Immersive start: centred on the board, tilted, slightly smaller board (see boardHome_2D / boardHome_MR in sessionConfig.js).
 const homeQuat = (home) => new THREE.Quaternion().setFromAxisAngle(TILT_AXIS, home.tilt * Math.PI / 180);
 function resetWorldForMR() {
+  setDrag(null); // see resetHome: a stale drag snapshot would re-apply the old pose
   const home = currentHome();
   worldGroup.position.copy(home.position);
   worldGroup.quaternion.copy(homeQuat(home));
@@ -1142,6 +1218,8 @@ renderer.xr.addEventListener('sessionend', () => {
   exitButtonMesh.visible = false;
   exitButtonHover = false;
   drawExitButton(false);
+  exitLaser.visible = false;
+  exitLaserUntil = 0;
   if (getSkyMode() === 3) { setSkyMode(0); loadSky(); } // passthrough only exists inside the session
   // Use the Local closers, not the state-only setters: they hide the meshes
   // and pointer line and reset hover to -1. setMenuOpen(false) alone left
@@ -1149,6 +1227,17 @@ renderer.xr.addEventListener('sessionend', () => {
   // menu was still up on relaunch and the next trigger press re-activated it.
   setMenuOpenLocal(false);
   setAppearanceOpenLocal(false);
+  // v36: coming out of MR, put the board back at the 2D home pose.
+  // Until now it stayed wherever the session left it (MR home pose,
+  // plus any moves/tilts made in the session), so the board came back
+  // in strange places — which is also what made a later Reset Home
+  // in 2D look like it was not tilting back. Applied explicitly from
+  // HOME_2D rather than via resetHome(): inside this handler
+  // isPresenting may still read true, which would take the MR branch.
+  worldGroup.position.copy(HOME_2D.position);
+  worldGroup.quaternion.copy(homeQuat(HOME_2D));
+  setTiltDeg(HOME_2D.tilt);
+  worldGroup.scale.setScalar(HOME_2D.scale);
   restartLevel();
 });
 
@@ -1158,9 +1247,27 @@ renderer.xr.addEventListener('sessionend', () => {
 // pressing its trigger.
 // Button indices measured on the Quest browser, left Touch controller.
 const MENU_TOGGLE_BUTTONS = [12, 5]; // 12 = menu button, 5 = Y
-const MENU_ROWS = 4;
-const MENU_W = 512, MENU_H = 20 + MENU_ROWS * 150;
-let menuHover = -1; // -1 none, 0 Debug, 1 Sky, 2 Reset view, 3 Exit MR
+// v36: the rows are 60% as tall as they were (90 px pitch, 78 px box,
+// 34 px font) — they were too tall. Row indices are named so
+// activateMenuItem reads like the menu itself.
+const MENU_DEBUG = 0, MENU_SKY = 1, MENU_RESET_HOME = 2, MENU_NEXT = 3,
+  MENU_RESTART = 4, MENU_CLEAR = 5, MENU_RESET_COLORS = 6, MENU_EXIT = 7;
+const MENU_ROWS = 8;
+const MENU_ROW_H = 90, MENU_ROW_BOX = 78, MENU_TOP = 12, MENU_FONT_PX = 34;
+// v36: an inactive hint row at the bottom, half the row height and
+// half the font size — it just says the rest of the options live
+// outside the session. It is drawn, never highlighted or selectable.
+const MENU_HINT_H = MENU_ROW_H / 2, MENU_HINT_FONT_PX = MENU_FONT_PX / 2;
+const MENU_W = 512, MENU_H = MENU_TOP + MENU_ROWS * MENU_ROW_H + MENU_HINT_H;
+let menuHover = -1; // -1 none, otherwise a MENU_* row above
+// v36: arm-then-confirm for the destructive menu rows. The in-page
+// confirm dialog is not visible inside a session, so the first tap on
+// Clear Scores / Reset Colors arms that row (re-labelled) and the
+// second tap within 5 s confirms. Selecting any other row, closing
+// the menu, or the timeout disarms it.
+let menuConfirm = null; // 'clear' | 'reset' | null
+let menuConfirmUntil = 0;
+const MENU_CONFIRM_MS = 5000;
 const EXIT_MR_DELAY_MS = 3000;
 const EXIT_MR_MESSAGE = 'Exiting MR in 3 seconds. Look forward; your view will be reset.';
 let leftButtonsDown = '';
@@ -1207,8 +1314,11 @@ menuCanvas.width = MENU_W; menuCanvas.height = MENU_H;
 const menuCtx = menuCanvas.getContext('2d');
 const menuTexture = new THREE.CanvasTexture(menuCanvas);
 menuTexture.colorSpace = THREE.SRGBColorSpace;
+// v36: the whole menu is 25% smaller than the old 0.2 m wide —
+// fonts and everything scale with the mesh, so the canvas is untouched.
+const MENU_WORLD_W = 0.15;
 const menuMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.2, 0.2 * MENU_H / MENU_W),
+  new THREE.PlaneGeometry(MENU_WORLD_W, MENU_WORLD_W * MENU_H / MENU_W),
   new THREE.MeshBasicMaterial({ map: menuTexture, transparent: true, side: THREE.DoubleSide })
 );
 // Above the controller and tilted back so it faces the player's eyes.
@@ -1231,20 +1341,42 @@ function drawMenu() {
   menuCtx.clearRect(0, 0, MENU_W, MENU_H);
   const menuHover = getMenuHover();
   const debugVisible = getDebugVisible();
-  const rows = [`Debug: ${debugVisible ? 'On' : 'Off'}`, `Sky: ${SKY_MODES[nextSkyMode()]}`, 'Reset view', 'Exit MR'];
+  const rows = [
+    `Debug: ${debugVisible ? 'On' : 'Off'}`,
+    `Sky: ${SKY_MODES[nextSkyMode()]}`,
+    'Reset Home',
+    'Next Level',
+    'Restart Level',
+    menuConfirm === 'clear' ? 'Confirm clear?' : 'Clear Scores',
+    menuConfirm === 'reset' ? 'Confirm reset?' : 'Reset Colors',
+    'Exit MR',
+  ];
   rows.forEach((label, i) => {
-    const y = 20 + i * 150;
-    menuCtx.fillStyle = i === menuHover ? '#3498db' : 'rgba(20,20,30,0.92)';
-    menuCtx.fillRect(10, y, MENU_W - 20, 130);
+    const y = MENU_TOP + i * MENU_ROW_H;
+    const armed = (i === MENU_CLEAR && menuConfirm === 'clear')
+      || (i === MENU_RESET_COLORS && menuConfirm === 'reset');
+    menuCtx.fillStyle = armed
+      ? (i === menuHover ? '#c0392b' : '#8e2f2f')
+      : (i === menuHover ? '#3498db' : 'rgba(20,20,30,0.92)');
+    menuCtx.fillRect(10, y, MENU_W - 20, MENU_ROW_BOX);
     menuCtx.strokeStyle = '#9a9a9a';
     menuCtx.lineWidth = 4;
-    menuCtx.strokeRect(10, y, MENU_W - 20, 130);
+    menuCtx.strokeRect(10, y, MENU_W - 20, MENU_ROW_BOX);
     menuCtx.fillStyle = '#ffffff';
-    menuCtx.font = 'bold 56px system-ui, sans-serif';
+    menuCtx.font = `bold ${MENU_FONT_PX}px system-ui, sans-serif`;
     menuCtx.textAlign = 'center';
     menuCtx.textBaseline = 'middle';
-    menuCtx.fillText(label, MENU_W / 2, y + 65);
+    menuCtx.fillText(label, MENU_W / 2, y + MENU_ROW_BOX / 2);
   });
+  // Inactive hint row at the bottom: half-size grey text, no box,
+  // never highlighted. The hover math maps this strip to row 8,
+  // which fails the `row < MENU_ROWS` check, so it can never be
+  // selected; activateMenuItem only ever sees rows 0-7.
+  menuCtx.fillStyle = '#9a9a9a';
+  menuCtx.font = `${MENU_HINT_FONT_PX}px system-ui, sans-serif`;
+  menuCtx.textAlign = 'center';
+  menuCtx.textBaseline = 'middle';
+  menuCtx.fillText('Exit MR for Other Options', MENU_W / 2, MENU_TOP + MENU_ROWS * MENU_ROW_H + MENU_HINT_H / 2);
   menuTexture.needsUpdate = true;
 }
 
@@ -1252,6 +1384,7 @@ function setMenuOpenLocal(open) {
   if (open && getAppearanceOpen()) setAppearanceOpenLocal(false);
   const newMenuOpen = open && !!leftController;
   setMenuOpen(newMenuOpen);
+  if (!newMenuOpen) menuConfirm = null; // closing the menu disarms a pending confirm
   menuMesh.visible = newMenuOpen;
   pointerLine.visible = newMenuOpen && !!rightController;
   setMenuHover(-1);
@@ -1273,28 +1406,62 @@ function updateMenuHover() {
     const hit = menuRaycaster.intersectObject(menuMesh)[0];
     if (hit && hit.uv) {
       const y = (1 - hit.uv.y) * MENU_H;
-      const row = Math.floor((y - 20) / 150);
-      if (row >= 0 && row < MENU_ROWS && (y - 20) % 150 <= 130) hover = row;
+      const row = Math.floor((y - MENU_TOP) / MENU_ROW_H);
+      if (row >= 0 && row < MENU_ROWS && (y - MENU_TOP) % MENU_ROW_H <= MENU_ROW_BOX) hover = row;
     }
   }
   const menuHover = getMenuHover();
   if (hover !== menuHover) { setMenuHover(hover); drawMenu(); }
+  // An armed confirm lapses after 5 s; re-label the row when it does.
+  if (menuConfirm && performance.now() > menuConfirmUntil) {
+    menuConfirm = null;
+    drawMenu();
+  }
 }
 
 // Same ray as the menu hover, but against the Exit MR button on the
 // board. Only while a session is running; the button is hidden in 2D.
-// The highlight is the only aiming feedback — the pointer line stays
-// a menu-only thing.
+// The highlight is the aiming feedback while hovering — and the laser
+// (v35) draws the ray itself: it appears on ray-enter, follows the
+// controller, and 2 s after ray-exit it is gone (v36).
 function updateExitButtonHover() {
   let hover = false;
+  let hitPoint = null;
   if (renderer.xr.isPresenting && rightController && exitButtonMesh.visible) {
     scene.updateMatrixWorld();
     rightController.getWorldPosition(menuRaycaster.ray.origin);
     rightController.getWorldQuaternion(menuRayQuat);
     menuRaycaster.ray.direction.copy(menuRayDir.set(0, 0, -1).applyQuaternion(menuRayQuat));
-    if (menuRaycaster.intersectObject(exitButtonMesh)[0]) hover = true;
+    const hit = menuRaycaster.intersectObject(exitButtonMesh)[0];
+    if (hit) { hover = true; hitPoint = hit.point; }
   }
   if (hover !== exitButtonHover) { exitButtonHover = hover; drawExitButton(hover); }
+  const now = performance.now();
+  const pos = exitLaserGeometry.attributes.position;
+  if (hover && hitPoint) {
+    // Ray-enter / hovering: live laser, right controller to the button.
+    rightController.getWorldPosition(exitLaserOrigin);
+    exitLaserDist = exitLaserOrigin.distanceTo(hitPoint);
+    pos.setXYZ(0, exitLaserOrigin.x, exitLaserOrigin.y, exitLaserOrigin.z);
+    pos.setXYZ(1, hitPoint.x, hitPoint.y, hitPoint.z);
+    pos.needsUpdate = true;
+    exitLaserMaterial.opacity = 1;
+    exitLaser.visible = true;
+    exitLaserUntil = now + EXIT_LASER_LINGER_MS;
+  } else if (now < exitLaserUntil && rightController) {
+    // Ray-exit: the laser stays for 2 s, but it follows the
+    // controller now — it points where the controller points, at the
+    // last hit distance, instead of sticking to the button — fading out.
+    rightController.getWorldPosition(exitLaserOrigin);
+    const dir = menuRaycaster.ray.direction;
+    pos.setXYZ(0, exitLaserOrigin.x, exitLaserOrigin.y, exitLaserOrigin.z);
+    pos.setXYZ(1, exitLaserOrigin.x + dir.x * exitLaserDist, exitLaserOrigin.y + dir.y * exitLaserDist, exitLaserOrigin.z + dir.z * exitLaserDist);
+    pos.needsUpdate = true;
+    exitLaserMaterial.opacity = (exitLaserUntil - now) / EXIT_LASER_LINGER_MS;
+    exitLaser.visible = true;
+  } else {
+    exitLaser.visible = false;
+  }
 }
 
 function activateMenuItem() {
@@ -1303,21 +1470,55 @@ function activateMenuItem() {
   const selected = getMenuHover();
   if (selected < 0) return;
   triggerHaptic(0.4, 40, 'left');
+  // Destructive rows arm first (see the menuConfirm note above):
+  // the first tap arms the row and re-labels it; the second tap
+  // within 5 s confirms and closes the menu.
+  if (selected === MENU_CLEAR) {
+    if (menuConfirm === 'clear' && performance.now() < menuConfirmUntil) {
+      menuConfirm = null;
+      setMenuOpenLocal(false);
+      clearScores();
+      updateHUD(); // clearScores sets the message but does not redraw the HUD
+    } else {
+      menuConfirm = 'clear';
+      menuConfirmUntil = performance.now() + MENU_CONFIRM_MS;
+      setMessage('Select Clear Scores again to confirm.');
+      updateHUD();
+      drawMenu();
+    }
+    return;
+  }
+  if (selected === MENU_RESET_COLORS) {
+    if (menuConfirm === 'reset' && performance.now() < menuConfirmUntil) {
+      menuConfirm = null;
+      setMenuOpenLocal(false);
+      resetColors();
+    } else {
+      menuConfirm = 'reset';
+      menuConfirmUntil = performance.now() + MENU_CONFIRM_MS;
+      setMessage('Select Reset Colors again to confirm.');
+      updateHUD();
+      drawMenu();
+    }
+    return;
+  }
+  // Any other row disarms a pending confirm.
+  menuConfirm = null;
   setMenuOpenLocal(false);
-  if (selected === 0) {
+  if (selected === MENU_DEBUG) {
     setDebugVisible(!getDebugVisible());
     updateDebug();
-  } else if (selected === 1) {
+  } else if (selected === MENU_SKY) {
     toggleSky();
-  } else if (selected === 2) {
-    const home = currentHome();
-    const atHome = worldGroup.position.distanceTo(home.position) < 0.005
-      && Math.abs(worldGroup.scale.x - home.scale) < 0.005
-      && worldGroup.quaternion.angleTo(homeQuat(home)) < 0.005;
-    if (atHome) setMessage('View is already at the home position.');
-    else { resetWorldForMR(); setMessage('View reset.'); }
-    updateHUD();
-  } else if (selected === 3) {
+  } else if (selected === MENU_RESET_HOME) {
+    // v36: the old 'Reset view' row was this same action in a session,
+    // so it is now named like the button it mirrors.
+    resetHome();
+  } else if (selected === MENU_NEXT) {
+    nextLevel();
+  } else if (selected === MENU_RESTART) {
+    restartLevel();
+  } else if (selected === MENU_EXIT) {
     requestExitMR();
   }
 }
