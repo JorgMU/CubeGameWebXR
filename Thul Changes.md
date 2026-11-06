@@ -1,8 +1,8 @@
 # Thul Changes — v40 (2026-11-06)
 
-Based on v39. `docs/main.js` and `README.md` change (plus this
-note). `docs/index.html`, `docs/scene.js` and `sessionConfig.js` are
-unchanged. (Paths updated after the v41 `app/` -> `docs/` rename.)
+Based on v39. `app/main.js` and `README.md` change (plus this
+note). `app/index.html`, `app/scene.js` and `sessionConfig.js` are
+unchanged.
 
 ## Status panel: filled, with a divider — and the text stays put
 
@@ -188,3 +188,30 @@ Not tested in a headset by Muse.
   https://jorgmu.github.io/CubeGameWebXR/ — and
   .github/copilot-instructions.md needs its "Keep browser-served
   assets under `app/`" line changed to `docs/`.
+
+## Grid default is black at full opacity now
+
+- The grid default moved from black at 25% (v40) to black at full
+  opacity, matching the repo change Jorg checked in Nov 6, 2026.
+  sessionConfig.js and the README say so; the old-grid migration
+  already reads the default, so nothing else needed changing.
+
+## v42: no more Range requests — GitHub Pages cached 1-byte files
+
+- The loader (index.html) and buildTime.js read Last-Modified by
+  fetching each file with `Range: bytes=0-0` + `cache: 'reload'`.
+  That worked locally only because the dev server sends
+  `Cache-Control: no-store`, so nothing is ever cached. On GitHub
+  Pages the responses are cacheable, and the browser cached the
+  1-byte partial response AS the whole file: config.js came back
+  as "/" in Edge DevTools (it starts with `//`), the module graph
+  died on a syntax error, and only the HUD panel and buttons
+  showed — no board, no cube.
+- Fix: plain GET with `cache: 'reload'`, no Range header, in both
+  places. It downloads the ten small files in full, which is also
+  what primes the cache with the real files — the thing the check
+  was for in the first place.
+- After pushing, do one hard refresh (Ctrl+F5) so the fixed
+  index.html loads; after that the page heals its own cache. The
+  poisoned entries would also expire on their own within about
+  10 minutes (Pages' max-age=600).

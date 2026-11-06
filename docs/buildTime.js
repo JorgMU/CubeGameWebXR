@@ -21,9 +21,13 @@ const FILES_TO_CHECK = [
 
 async function getFileModifiedTime(filePath) {
   try {
+    // Plain GET, no Range header: asking for one byte (bytes=0-0) just
+    // to read Last-Modified backfires on a caching host — the 1-byte
+    // response gets cached as the whole file (config.js came back as
+    // "/" on GitHub Pages and the module graph died, so only the HUD
+    // panel and buttons showed). The local server hides this because
+    // it sends no-store.
     const response = await fetch(filePath, {
-      method: 'GET',
-      headers: { 'Range': 'bytes=0-0' },
       cache: 'reload', // never read Last-Modified from a cached copy, and prime the cache with the fresh file
     });
     const lastModified = response.headers.get('Last-Modified');

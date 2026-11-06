@@ -1879,9 +1879,10 @@ try {
     saved.cube = { ...cssToHsv(defAppearance.cube.color), a: saved.cube.a };
   }
   // v40: the old grid default was dark green #0c3700 at full opacity;
-  // the new one is black at 25%. A save that still holds the old
-  // default (never customised) moves to the new one; a customised grid
-  // colour is left alone. #0c3700 is about h 107, s 1, v 0.216.
+  // the new one is black at full opacity (v41; was 25% in v40). A save
+  // that still holds the old default (never customised) moves to the
+  // new one; a customised grid colour is left alone. #0c3700 is about
+  // h 107, s 1, v 0.216.
   const isOldGridDefault = saved && saved.grid && (
     Math.abs(saved.grid.h - 107) < 1 && Math.abs(saved.grid.s - 1) < 0.05 && Math.abs(saved.grid.v - 0.216) < 0.02
   );

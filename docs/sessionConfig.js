@@ -47,7 +47,7 @@ export const SESSION_DEFAULTS = {
     // wrong layer. Dark neutral grey lets every shape colour read.
     cube: { color: '#222222', opacity: 0.4 },
     cubeIcons: { opacity: 0.9 },
-    grid: { color: '#000000', opacity: 1 }, // v40: black and faint — bright grid colours flicker with aliasing and foveated rendering
+    grid: { color: '#000000', opacity: 1 }, // v41: black at full opacity (was 25% in v40) — user change, checked in Nov 6, 2026
     edges: { color: '#055200', opacity: 1 },
     shapeBorder: { color: '#000000', width: 5 }, // width in px on the 256 px icon texture
     circle: { fill: '#c10303' },

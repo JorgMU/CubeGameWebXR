@@ -232,7 +232,15 @@
     const timestamps = [];
     for (const file of FILES_TO_CHECK) {
       try {
-        const response = await fetch(file, { method: 'GET', headers: { 'Range': 'bytes=0-0' }, cache: 'reload' });
+        // No Range header here: the old code asked for one byte
+        // (bytes=0-0) just to read Last-Modified, but on a caching host
+        // that 1-byte response gets cached AS the file — config.js came
+        // back as "/" on GitHub Pages and the module graph died, so only
+        // the HUD panel and buttons showed. The local server hides this
+        // because it sends no-store. A plain GET costs a full download
+        // of ten small files, and primes the cache with the real files,
+        // which is what this check is for.
+        const response = await fetch(file, { cache: 'reload' });
         const lastModified = response.headers.get('Last-Modified');
         if (lastModified) timestamps.push(new Date(lastModified));
       } catch (e) {}

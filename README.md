@@ -14,7 +14,7 @@ A 90s-inspired cube-rolling puzzle for Meta Quest, in the browser.
 - A cube has dark-grey faces (`CUBE_FACE_COLOR` `#222222`) at 40% opacity
   (`CUBE_OPACITY`), each carrying a different coloured symbol (the same
   shape and colour as the board icons). Current colours, from the appearance
-  panel's colour table: board `#000584`, cube `#222222`, grid `#000000` at 25%
+  panel's colour table: board `#000584`, cube `#222222`, grid `#000000` at full
   opacity, edges `#055200`, circle `#c10303`, triangle `#049f27`, square `#354cff`,
   star `#f1c40f`, diamond `#9b59b6`, hexagon `#e67e22`, shape border
   `#000000` 5 px. Red, Green, Blue, Yellow, Purple, Orange.
@@ -115,7 +115,7 @@ and Purple west.
   single colour and width shared by every shape. The colour picker (hue across, saturation down) and
   Brightness slider update live; Opacity appears for the board, cube faces, icons,
   grid lines and cube edges — the two line opacities are separate values. The grid lines default to
-  black at 25% opacity: bright line colours flicker with aliasing and foveated rendering.
+  black at full opacity.
   "Icons" has two Opacity sliders — one for the board icons, one for the cube icons — and no colour
   picker: the icon colours come from the shape fills.
   The cube faces and their shapes have separate opacities: each shape sits on its own plane just outside
