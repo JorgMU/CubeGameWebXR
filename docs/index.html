@@ -13,6 +13,13 @@
     border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.5; max-width: 320px;
   }
   #hud b { color: #ffd166; }
+  /* v43: the status line is anchored on its | separator — the left half
+     right-justifies against it and the right half left-justifies from
+     it — so the | stays centred while the shape names change length,
+     matching the in-world panel. */
+  .hudStatusLine { display: flex; }
+  .hudStatusLeft { flex: 1; text-align: right; }
+  .hudStatusRight { flex: 1; text-align: left; }
   #hudDebug { margin-top: 8px; font: 11px Consolas, monospace; color: #9a9a9a; white-space: pre; }
   #hudColors { margin-top: 8px; font: 11px Consolas, monospace; color: #9a9a9a; white-space: pre; user-select: text; }
   #hudBuildTimestamp { font: 11px Consolas, monospace; color: #9a9a9a; }
@@ -159,7 +166,7 @@
 <div id="hud">
   <div>Level: <b id="hudLevel">1</b> &nbsp; Remaining: <b id="hudRemaining">–</b></div>
   <div>Time: <b id="hudTime">Ready</b> &nbsp; Score: <b id="hudScore">0</b></div>
-  <div><b id="hudDownShape">–</b> : <b id="hudDownCube">Cube</b> | <b id="hudBoardWord">Board</b>: <b id="hudBoardShape">–</b></div>
+  <div class="hudStatusLine"><span class="hudStatusLeft"><b id="hudDownShape">–</b> : <b id="hudDownCube">Cube</b></span><span> | </span><span class="hudStatusRight"><b id="hudBoardWord">Board</b>: <b id="hudBoardShape">–</b></span></div>
   <div id="hudMessage">Roll the cube onto a matching flat icon.</div>
   <div id="hudBuildTimestamp"></div>
   <details id="records">

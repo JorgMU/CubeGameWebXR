@@ -74,6 +74,7 @@ export const gameState = {
   lastHapticAt: 0,
   audioCtx: null,
   celebrateT: null,
+  matchBurstT: null, // v43: the mini match-burst timer; null when no burst is running
   
   // Appearance
   appearanceOpen: false,
@@ -539,6 +540,14 @@ export function getCelebrateT() {
 
 export function setCelebrateT(t) {
   gameState.celebrateT = t;
+}
+
+export function getMatchBurstT() {
+  return gameState.matchBurstT;
+}
+
+export function setMatchBurstT(t) {
+  gameState.matchBurstT = t;
 }
 
 // ============================================================================

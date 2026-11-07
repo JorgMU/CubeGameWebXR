@@ -58,6 +58,7 @@ import {
   getLastHapticAt, setLastHapticAt,
   getAudioCtx, setAudioCtx,
   getCelebrateT, setCelebrateT,
+  getMatchBurstT, setMatchBurstT,
   getAppearance, setAppearance,
   getAppearanceOpen, setAppearanceOpen,
   getAppearanceItem, setAppearanceItem,
@@ -672,23 +673,38 @@ function drawStatusPanel(level, remaining, levelStartedAt, levelScore, down, boa
   // belong to; the separators stay white. A blank square reads
   // "Board: Blank", both in white.
   panelCtx.font = 'bold 42px system-ui, sans-serif';
-  const parts = [
+  // v43: the separator is pinned to the panel centre — the left half
+  // ("<shape> : Cube") is right-justified against it and the right half
+  // ("Board: <shape>") left-justified from it — so the | never moves
+  // when a shape name changes length. Before, the whole line was
+  // centred as one run and the | drifted with the total width.
+  const left = [
     { text: shapeName(down.shape), color: down.css },
     { text: ' : ', color: '#ffffff' },
     { text: 'Cube', color: down.css },
-    { text: ' | ', color: '#ffffff' },
+  ];
+  const sep = { text: ' | ', color: '#ffffff' };
+  const right = [
     { text: 'Board', color: board ? board.css : '#ffffff' },
     { text: ': ', color: '#ffffff' },
     board ? { text: shapeName(board.shape), color: board.css } : { text: 'Blank', color: '#ffffff' },
   ];
-  const totalW = parts.reduce((sum, p) => sum + panelCtx.measureText(p.text).width, 0);
-  let x = PANEL_CANVAS_W / 2 - totalW / 2;
+  const runW = (run) => run.reduce((sum, p) => sum + panelCtx.measureText(p.text).width, 0);
+  const drawRun = (run, x) => {
+    panelCtx.textAlign = 'left';
+    for (const p of run) {
+      panelCtx.fillStyle = p.color;
+      panelCtx.fillText(p.text, x, 181);
+      x += panelCtx.measureText(p.text).width;
+    }
+  };
+  const cx = PANEL_CANVAS_W / 2;
+  const sepW = panelCtx.measureText(sep.text).width;
+  drawRun(left, cx - sepW / 2 - runW(left));
+  panelCtx.fillStyle = sep.color;
   panelCtx.textAlign = 'left';
-  for (const p of parts) {
-    panelCtx.fillStyle = p.color;
-    panelCtx.fillText(p.text, x, 181);
-    x += panelCtx.measureText(p.text).width;
-  }
+  panelCtx.fillText(sep.text, cx - sepW / 2, 181);
+  drawRun(right, cx + sepW / 2);
   panelCtx.textAlign = 'center';
   // Temporary message, centred in the bottom section (below the
   // divider at canvas y 212). Drawn only while there is one; the
@@ -897,6 +913,7 @@ confetti.visible = false;
 worldGroup.add(confetti);
 
 function startCelebration() {
+  stopMatchBurst(); // the win takes over from any in-flight match burst
   const tint = new THREE.Color();
   for (let i = 0; i < CONFETTI_COUNT; i++) {
     const o = i * 3;
@@ -933,6 +950,68 @@ function updateCelebration(dt) {
   confetti.material.opacity = 1 - k * k;
   panel.scale.setScalar(1 + 0.12 * Math.sin(k * Math.PI * 4) * (1 - k));
   setCelebrateT(newCelebrateT);
+}
+
+// --- Match burst: a mini version of the level-win celebration ---------------
+// Same confetti look (six shape colours, soft round sprite, additive),
+// but one small burst out of the top of the cube instead of 150 pieces
+// across the whole board — and no panel bounce. Fired from finishRoll()
+// on a match that does not complete the level; the win celebration takes
+// over on the final match. A fast re-match just re-seeds it.
+const MATCH_BURST_COUNT = 40;
+const MATCH_BURST_SECONDS = 1.2;
+const matchBurstPositions = new Float32Array(MATCH_BURST_COUNT * 3);
+const matchBurstColors = new Float32Array(MATCH_BURST_COUNT * 3);
+const matchBurstVelocities = new Float32Array(MATCH_BURST_COUNT * 3);
+const matchBurstGeometry = new THREE.BufferGeometry();
+matchBurstGeometry.setAttribute('position', new THREE.BufferAttribute(matchBurstPositions, 3));
+matchBurstGeometry.setAttribute('color', new THREE.BufferAttribute(matchBurstColors, 3));
+const matchBurst = new THREE.Points(matchBurstGeometry, new THREE.PointsMaterial({
+  size: 0.05, map: confettiSprite, vertexColors: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+}));
+matchBurst.frustumCulled = false;
+matchBurst.visible = false;
+worldGroup.add(matchBurst);
+
+function startMatchBurst() {
+  // The cube rests on the board, so its centre is CUBE/2 up and its top
+  // face is one CUBE above the board; the burst starts just above it.
+  const ox = cube.position.x, oy = cube.position.y + CUBE / 2 + 0.02, oz = cube.position.z;
+  const tint = new THREE.Color();
+  for (let i = 0; i < MATCH_BURST_COUNT; i++) {
+    const o = i * 3;
+    matchBurstPositions[o] = ox + (Math.random() - 0.5) * 0.04;
+    matchBurstPositions[o + 1] = oy;
+    matchBurstPositions[o + 2] = oz + (Math.random() - 0.5) * 0.04;
+    matchBurstVelocities[o] = (Math.random() - 0.5) * 0.3;
+    matchBurstVelocities[o + 1] = 0.3 + Math.random() * 0.5;
+    matchBurstVelocities[o + 2] = (Math.random() - 0.5) * 0.3;
+    tint.setHex(COLORS[i % COLORS.length].hex);
+    matchBurstColors[o] = tint.r; matchBurstColors[o + 1] = tint.g; matchBurstColors[o + 2] = tint.b;
+  }
+  matchBurstGeometry.attributes.position.needsUpdate = true;
+  matchBurstGeometry.attributes.color.needsUpdate = true;
+  matchBurst.material.opacity = 1;
+  matchBurst.visible = true;
+  setMatchBurstT(0);
+}
+
+function stopMatchBurst() {
+  setMatchBurstT(null);
+  matchBurst.visible = false;
+}
+
+function updateMatchBurst(dt) {
+  const t = getMatchBurstT();
+  if (t === null) return;
+  const nt = t + dt;
+  if (nt >= MATCH_BURST_SECONDS) { stopMatchBurst(); return; }
+  const k = nt / MATCH_BURST_SECONDS;
+  for (let i = 0; i < MATCH_BURST_COUNT * 3; i++) matchBurstPositions[i] += matchBurstVelocities[i] * dt;
+  matchBurstGeometry.attributes.position.needsUpdate = true;
+  matchBurst.material.opacity = 1 - k * k;
+  setMatchBurstT(nt);
 }
 
 function finishRoll() {
@@ -979,6 +1058,7 @@ function finishRoll() {
       startCelebration();
       setMessage(`Level complete! ${renderer.xr.isPresenting ? 'Pull a trigger' : 'Press N'} for the next level.`);
     } else {
+      startMatchBurst(); // mini celebration out of the top of the cube
       setMessage(`Matched ${COLORS[orientation.down].name}! ${remaining} left.`);
     }
   } else if (entry) {
@@ -2387,6 +2467,7 @@ generateLevel();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   updateCelebration(dt);
+  updateMatchBurst(dt);
   
   const levelStartedAt = getLevelStartedAt();
   const win = getWin();

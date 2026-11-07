@@ -215,3 +215,20 @@ Not tested in a headset by Muse.
   index.html loads; after that the page heals its own cache. The
   poisoned entries would also expire on their own within about
   10 minutes (Pages' max-age=600).
+
+## v43: the | stays put, and a match gets its own mini burst
+
+- The Face Down / Board line no longer jumps: the `|` separator is
+  pinned to the centre, with "<shape> : Cube" right-justified against
+  its left side and "Board: <shape>" left-justified on its right.
+  Before, the whole line was centred as one run, so the `|` drifted
+  whenever a shape name changed length. Same fix in both places that
+  show the line: the in-world status panel (measured canvas runs)
+  and the 2D HUD (flexbox halves). Colours and wording unchanged.
+- A match now fires a mini version of the level-win celebration: a
+  single burst of 40 confetti pieces in the six shape colours, out
+  of the top of the cube, fading over 1.2 seconds. No panel bounce
+  — that stays with the win. A fast re-match just re-seeds the
+  burst; the win celebration takes over on the final match. This
+  was queued Nov 6 (end of night) as "a single-burst animation like
+  the clear-board animation out of the top of the cube".
