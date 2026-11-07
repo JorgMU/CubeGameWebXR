@@ -13,6 +13,7 @@
 - Keep browser-served assets under `docs/`; the local server intentionally exposes only that folder.
 - Preserve the no-build workflow and the Three.js r160 CDN import map unless the user requests a change.
 - Keep runtime asset URLs relative to `docs/index.html` so they resolve from the web root.
+- Keep `Conversations/` local-only; never track or publish conversation archives.
 
 ## Session Startup Protocol
 
@@ -53,7 +54,7 @@ Run this protocol **once per programming session**, only when the user says they
 7. ACTION: After the user pastes the latest conversation into the appropriate `Chat_<date>.txt` file and confirms it is saved, run a sensitive-information check only when scanning is required by Step 6.
    - Scope: only version-controlled files in the repo.
    - If sensitive information is found, alert the user and halt publishing until resolved.
-8. ACTION: Stage only newly created files. Do not stage changes to existing files.
+8. ACTION: Stage only newly created files. Do not stage changes to existing files. Never stage files in `Conversations/`.
 
 ### Reminders (do not execute)
 
